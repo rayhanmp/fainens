@@ -14,6 +14,8 @@ import { GrowthChart } from '../features/goals/detail/GrowthChart';
 import { PartsSection } from '../features/goals/detail/PartsSection';
 import { CompleteGoalDialog, GoalDialog, MoveMoneyDialog, PayFromGoalDialog, type GoalDraft } from '../features/goals/dialogs';
 import { GoalNotes } from '../features/goals/GoalNotes';
+import { useGoalHeadline } from '../features/goals/use-headline';
+import { GOAL_TYPES, isGoalTypeKey } from '../features/goals/goal-types';
 import {
   useAllocateMutation,
   useCompleteGoalMutation,
@@ -57,6 +59,7 @@ function GoalPage() {
   const overview = overviewQuery.data;
   const goal = detail?.goal;
   const color = coloredGoals(overview?.goals ?? []).find((item) => item.goal.id === id)?.color ?? GOAL_COLORS[0];
+  const headline = useGoalHeadline();
 
   // Putting money in that reaches a new quarter of the target is celebrated.
   const celebrateIfReached = (before: number, after: { setAside: number; targetAmount: number }) => {
@@ -98,6 +101,7 @@ function GoalPage() {
               <GoalPageHero
                 detail={detail}
                 color={color}
+                headline={headline(goal, detail.parts)}
                 pausing={update.isPending}
                 onPutIn={() => setMoving('in')}
                 onTakeOut={() => setMoving('out')}
@@ -116,7 +120,7 @@ function GoalPage() {
               <div className="min-w-0 space-y-6">
                 <GrowthChart detail={detail} color={color} />
                 {/* Its own save, so typing never holds up the buttons above; the notes say when they're saved. */}
-                <GoalNotes key={id} value={goal.description} onSave={async (next) => { await saveNotes.mutateAsync({ id, description: next }); }} />
+                <GoalNotes key={id} value={goal.description} starter={isGoalTypeKey(goal.goalType) ? { label: GOAL_TYPES[goal.goalType].label, markdown: GOAL_TYPES[goal.goalType].notes } : undefined} onSave={async (next) => { await saveNotes.mutateAsync({ id, description: next }); }} />
                 <PartsSection detail={detail} onPay={(part) => setPaying({ partId: part.id })} />
                 <FilesSection detail={detail} />
               </div>

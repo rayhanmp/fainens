@@ -7,6 +7,7 @@ import { cn } from '../../../lib/utils';
 import { MoneyField } from '../../savings/fields';
 import { InfoHint } from '../../savings/InfoHint';
 import { Section } from '../../subscriptions/PageParts';
+import { GOAL_TYPES, isGoalTypeKey } from '../goal-types';
 import { useAddPartMutation, useDeletePartMutation, useUpdateGoalMutation, useUpdatePartMutation, type GoalDetail, type GoalPart } from '../queries';
 
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
@@ -79,6 +80,8 @@ export function PartsSection({ detail, onPay }: { detail: GoalDetail; onPay: (pa
   const total = parts.reduce((sum, part) => sum + part.amount, 0);
   const paid = parts.filter((part) => part.paidAt !== null).reduce((sum, part) => sum + part.amount, 0);
   const active = goal.status === 'active';
+  const named = new Set(parts.map((part) => part.name.trim().toLowerCase()));
+  const suggestions = (isGoalTypeKey(goal.goalType) ? GOAL_TYPES[goal.goalType].parts : []).filter((suggestion) => !named.has(suggestion.toLowerCase()));
 
   const submit = async () => {
     if (!name.trim() || !amount) return;
@@ -113,10 +116,21 @@ export function PartsSection({ detail, onPay }: { detail: GoalDetail; onPay: (pa
             </div>
           </>
         )}
+        {/* The parts this kind of goal is usually made of, one tap to start one. */}
+        {active && suggestions.length > 0 && (
+          <div className={cn('flex flex-wrap items-center gap-1.5', parts.length > 0 && 'mt-3')}>
+            <span className="mr-1 text-xs text-[var(--ref-on-surface-variant)]">Usually:</span>
+            {suggestions.map((suggestion) => (
+              <button key={suggestion} type="button" onClick={() => { setName(suggestion); requestAnimationFrame(() => document.getElementById(`part-amount-${goal.id}`)?.focus()); }} className="rounded-full border border-[var(--color-border)] px-2.5 py-1 text-xs font-medium text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]">
+                + {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
         {active && (
-          <form onSubmit={(event) => { event.preventDefault(); void submit(); }} className={cn('flex flex-wrap items-center gap-2', parts.length > 0 && 'mt-3')}>
+          <form onSubmit={(event) => { event.preventDefault(); void submit(); }} className={cn('flex flex-wrap items-center gap-2', (parts.length > 0 || suggestions.length > 0) && 'mt-3')}>
             <input aria-label="New part" className="brutalist-input h-[34px] w-full min-w-0 sm:w-auto sm:flex-1" placeholder={parts.length ? 'Another part' : 'A part of the cost, like flights'} value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
-            <div className="min-w-0 flex-1 sm:w-[150px] sm:flex-none"><MoneyField ariaLabel="Part amount" value={amount} onChange={setAmount} /></div>
+            <div className="min-w-0 flex-1 sm:w-[150px] sm:flex-none"><MoneyField id={`part-amount-${goal.id}`} ariaLabel="Part amount" value={amount} onChange={setAmount} /></div>
             <Button type="submit" size="sm" variant="secondary" isLoading={add.isPending} disabled={!name.trim() || !amount}><Plus className="mr-1 inline h-3.5 w-3.5" aria-hidden />Add</Button>
           </form>
         )}

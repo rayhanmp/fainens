@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router';
 import { cn } from '../../lib/utils';
 import { coloredGoals } from '../goals/colors';
 import type { GoalsOverview } from '../goals/queries';
+import { useGoalHeadline } from '../goals/use-headline';
 import { PanelHeader, PanelLink } from './PanelParts';
 import { panelCard } from './panel-styles';
 
@@ -22,6 +23,7 @@ export function GoalsDashboardPanel({ overview, isLoading, now, formatAmount }: 
   formatAmount: (amount: number) => string;
 }) {
   const goals = coloredGoals(overview?.goals ?? []);
+  const headline = useGoalHeadline();
   const whole = Math.max(overview?.available ?? 0, overview?.setAside ?? 0, 1);
   const free = Math.max(0, overview?.unassigned ?? 0);
 
@@ -54,8 +56,11 @@ export function GoalsDashboardPanel({ overview, isLoading, now, formatAmount }: 
                       <span className="block h-full rounded-full" style={{ width: `${progress * 100}%`, background: color }} />
                     </span>
                     <span className="mt-1 block text-[11px] tabular-nums text-[var(--ref-on-surface-variant)]">
-                      {formatAmount(goal.setAside)} of {formatAmount(goal.targetAmount)}
-                      {goal.paused ? ' · Paused' : goal.reachMonths === 0 ? ' · All there' : goal.reachMonths !== null ? ` · ${monthYear(goal.reachMonths, now)}` : ''}
+                      {/* Its type's headline when it has one, like days to go; otherwise when it's reached. */}
+                      {headline(goal) ?? <>
+                        {formatAmount(goal.setAside)} of {formatAmount(goal.targetAmount)}
+                        {goal.paused ? ' · Paused' : goal.reachMonths === 0 ? ' · All there' : goal.reachMonths !== null ? ` · ${monthYear(goal.reachMonths, now)}` : ''}
+                      </>}
                     </span>
                   </Link>
                 </li>

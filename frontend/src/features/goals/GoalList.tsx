@@ -9,6 +9,7 @@ import { InfoHint } from '../savings/InfoHint';
 import { coloredGoals } from './colors';
 import { goalPace } from './pace';
 import type { Goal, GoalsOverview } from './queries';
+import { useGoalHeadline } from './use-headline';
 
 const monthYear = (time: number) => new Date(time).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 
@@ -38,6 +39,8 @@ export function GoalList({ overview, selectedId, onMove, onComplete, onEdit, onR
   const { formatAmount } = useBalanceVisibility();
   const [showDone, setShowDone] = useState(false);
   const colored = coloredGoals(overview.goals);
+  const headline = useGoalHeadline();
+  const headlines = new Map(colored.map(({ goal }) => [goal.id, headline(goal)]));
   const [dragOrder, setDragOrder] = useState<number[] | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const order = dragOrder ?? colored.map(({ goal }) => goal.id);
@@ -111,6 +114,7 @@ export function GoalList({ overview, selectedId, onMove, onComplete, onEdit, onR
                         </span>
                         <span className="shrink-0 text-sm tabular-nums text-[var(--ref-on-surface-variant)]"><span className="font-semibold text-[var(--ref-on-surface)]">{formatAmount(goal.setAside)}</span> of {formatAmount(goal.targetAmount)}</span>
                       </span>
+                      {headlines.get(goal.id) && <span className="mt-0.5 block text-xs font-semibold text-[var(--ref-on-surface)]">{headlines.get(goal.id)}</span>}
                       <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-[var(--ref-on-surface-variant)]">
                         {goal.kind === 'spend' ? 'to buy' : 'to keep'}
                         {goal.byDate ? ` · by ${monthYear(goal.byDate)}` : ''}

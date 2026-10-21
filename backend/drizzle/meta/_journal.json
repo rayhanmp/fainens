@@ -372,6 +372,13 @@
       "when": 1788110000000,
       "tag": "0052_goal_details",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1788120000000,
+      "tag": "0053_goal_types",
+      "breakpoints": true
     }
   ]
 }

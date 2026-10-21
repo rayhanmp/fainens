@@ -9,6 +9,7 @@ import { Field, MoneyField, PercentField, Segmented } from '../savings/fields';
 import { monthInputValue, parseMonthInput } from '../savings/input-format';
 import { useTransactionList } from '../transactions/queries';
 import type { Goal } from './queries';
+import { GOAL_TYPE_KEYS, GOAL_TYPES, isGoalTypeKey, type GoalTypeKey } from './goal-types';
 import { GOAL_ICONS, GOAL_TEMPLATES, type GoalTemplate } from './templates';
 
 function Footer({ formId, submitLabel, onClose, busy, extra }: { formId: string; submitLabel: string; onClose: () => void; busy?: boolean; extra?: React.ReactNode }) {
@@ -30,6 +31,10 @@ function ErrorLine({ error }: { error: string | null }) {
 export type GoalDraft = {
   name: string;
   icon: string | null;
+  /** What kind of goal it is, which shapes its page; null when started blank. */
+  goalType: GoalTypeKey | null;
+  /** That type's own figures, when the form sets them (a house's price and down payment share). */
+  typeData?: Record<string, unknown>;
   targetAmount: number;
   byDate: number | null;
   kind: 'spend' | 'keep';
@@ -122,6 +127,7 @@ export function GoalDialog({ goal, initial, unassigned, salary, emergencyAmount 
   const [month, setMonth] = useState(monthInputValue(start.byDate ? new Date(start.byDate) : new Date(new Date().getFullYear() + 1, new Date().getMonth(), 1)));
   const [kind, setKind] = useState<'spend' | 'keep'>(start.kind ?? 'spend');
   const [yearly, setYearly] = useState(start.recurrence === 'yearly');
+  const [goalType, setGoalType] = useState<GoalTypeKey | null>(isGoalTypeKey(start.goalType) ? start.goalType : null);
   const [monthlyMode, setMonthlyMode] = useState<'amount' | 'percent'>(start.monthlyPercent ? 'percent' : 'amount');
   const [monthlyAmount, setMonthly] = useState(start.monthlyPercent ? 0 : start.monthlyAmount ?? 0);
   const [monthlyPercent, setPercent] = useState(start.monthlyPercent ?? 10);
@@ -138,6 +144,7 @@ export function GoalDialog({ goal, initial, unassigned, salary, emergencyAmount 
     setIcon(template.icon);
     setKind(template.draft.kind ?? 'spend');
     setYearly(template.draft.recurrence === 'yearly');
+    setGoalType(isGoalTypeKey(template.key) ? template.key : null);
     if (template.draft.recurrence === 'yearly') setDated(true);
     if (template.key === 'emergency' && emergencyAmount > 0) setTarget(emergencyAmount);
     if (template.shareOfPrice) setShareOfPrice({ price: 0, share: template.shareOfPrice });
@@ -156,6 +163,9 @@ export function GoalDialog({ goal, initial, unassigned, salary, emergencyAmount 
     onSave({
       name: name.trim(),
       icon,
+      goalType,
+      // A house worked out from its price keeps the price and share, for its page.
+      ...(goalType === 'house' && shareOfPrice?.price ? { typeData: { ...(goal?.typeData ?? {}), price: shareOfPrice.price, dpShare: shareOfPrice.share } } : {}),
       targetAmount,
       byDate,
       kind,
@@ -201,6 +211,15 @@ export function GoalDialog({ goal, initial, unassigned, salary, emergencyAmount 
           onChange={setKind}
           options={[{ value: 'spend', label: 'Something to buy' }, { value: 'keep', label: 'Money to keep' }]}
         />
+        {/* A new goal's type comes from its template; here it can be changed later, or set on a blank one. */}
+        {goal && (
+          <Dropdown
+            label="Kind of goal"
+            value={goalType ?? 'none'}
+            options={[{ value: 'none', label: 'None: a plain goal' }, ...GOAL_TYPE_KEYS.map((key) => ({ value: key, label: `${GOAL_TYPES[key].icon} ${GOAL_TYPES[key].label}` }))]}
+            onChange={(value) => setGoalType(isGoalTypeKey(value) ? value : null)}
+          />
+        )}
         {shareOfPrice && (
           <div className="grid grid-cols-[minmax(0,1fr)_120px] gap-3">
             <Field label="Price" htmlFor="goal-price">

@@ -242,16 +242,27 @@ export const savingsGoals = sqliteTable("savings_goal", {
   /** Expenses in this category from `category_since` on are paid out of the goal. */
   categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
   categorySince: integer("category_since", { mode: "timestamp_ms" }),
+  /**
+   * What kind of goal it is (emergency, trip, house, wedding, umrah, education, gadget, vehicle-tax,
+   * insurance, lebaran), which shapes its page; null for a goal started blank. `type_data` (JSON)
+   * holds that type's own figures, like a house's price or a wedding's guest count.
+   */
+  goalType: text("goal_type"),
+  typeData: text("type_data").notNull().default("{}"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
 });
 
-/** One part of a goal's cost, like the flights of a trip; ticked off when it's paid. */
+/**
+ * One part of a goal's cost, like the flights of a trip; ticked off when it's paid. `due_at` is
+ * when it has to be paid, like a school term's fee.
+ */
 export const goalParts = sqliteTable("goal_part", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   amount: integer("amount").notNull(),
+  dueAt: integer("due_at", { mode: "timestamp_ms" }),
   paidAt: integer("paid_at", { mode: "timestamp_ms" }),
   transactionId: integer("transaction_id").references(() => transactions.id, { onDelete: "set null" }),
   sortOrder: integer("sort_order").notNull().default(0),

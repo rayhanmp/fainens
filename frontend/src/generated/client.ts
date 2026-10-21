@@ -5320,6 +5320,28 @@ export const GetGoalsOverview200GoalsItemRecurrence = {
   yearly: 'yearly',
 } as const;
 
+/**
+ * @nullable
+ */
+export type GetGoalsOverview200GoalsItemGoalType = typeof GetGoalsOverview200GoalsItemGoalType[keyof typeof GetGoalsOverview200GoalsItemGoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoalsOverview200GoalsItemGoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type GetGoalsOverview200GoalsItemTypeData = {[key: string]: unknown};
+
 export type GetGoalsOverview200GoalsItem = {
   /**
    * @minimum -9007199254740991
@@ -5381,6 +5403,9 @@ export type GetGoalsOverview200GoalsItem = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: GetGoalsOverview200GoalsItemGoalType;
+  typeData: GetGoalsOverview200GoalsItemTypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -5425,6 +5450,28 @@ export const CreateGoalBodyRecurrence = {
   none: 'none',
   yearly: 'yearly',
 } as const;
+
+/**
+ * @nullable
+ */
+export type CreateGoalBodyGoalType = typeof CreateGoalBodyGoalType[keyof typeof CreateGoalBodyGoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateGoalBodyGoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type CreateGoalBodyTypeData = {[key: string]: unknown};
 
 export type CreateGoalBody = {
   /**
@@ -5512,6 +5559,9 @@ export type CreateGoalBody = {
    * @nullable
    */
   categorySince?: number | null;
+  /** @nullable */
+  goalType?: CreateGoalBodyGoalType;
+  typeData?: CreateGoalBodyTypeData;
   /**
    * @minimum 0
    * @maximum 10000000000000
@@ -5546,6 +5596,28 @@ export const CreateGoal201Recurrence = {
   none: 'none',
   yearly: 'yearly',
 } as const;
+
+/**
+ * @nullable
+ */
+export type CreateGoal201GoalType = typeof CreateGoal201GoalType[keyof typeof CreateGoal201GoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateGoal201GoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type CreateGoal201TypeData = {[key: string]: unknown};
 
 export type CreateGoal201 = {
   /**
@@ -5608,6 +5680,9 @@ export type CreateGoal201 = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: CreateGoal201GoalType;
+  typeData: CreateGoal201TypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -5682,6 +5757,28 @@ export const ReorderGoals200GoalsItemRecurrence = {
   yearly: 'yearly',
 } as const;
 
+/**
+ * @nullable
+ */
+export type ReorderGoals200GoalsItemGoalType = typeof ReorderGoals200GoalsItemGoalType[keyof typeof ReorderGoals200GoalsItemGoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReorderGoals200GoalsItemGoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type ReorderGoals200GoalsItemTypeData = {[key: string]: unknown};
+
 export type ReorderGoals200GoalsItem = {
   /**
    * @minimum -9007199254740991
@@ -5743,6 +5840,9 @@ export type ReorderGoals200GoalsItem = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: ReorderGoals200GoalsItemGoalType;
+  typeData: ReorderGoals200GoalsItemTypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -5843,6 +5943,28 @@ export const UpdateGoalSettings200GoalsItemRecurrence = {
   yearly: 'yearly',
 } as const;
 
+/**
+ * @nullable
+ */
+export type UpdateGoalSettings200GoalsItemGoalType = typeof UpdateGoalSettings200GoalsItemGoalType[keyof typeof UpdateGoalSettings200GoalsItemGoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalSettings200GoalsItemGoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type UpdateGoalSettings200GoalsItemTypeData = {[key: string]: unknown};
+
 export type UpdateGoalSettings200GoalsItem = {
   /**
    * @minimum -9007199254740991
@@ -5904,6 +6026,9 @@ export type UpdateGoalSettings200GoalsItem = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: UpdateGoalSettings200GoalsItemGoalType;
+  typeData: UpdateGoalSettings200GoalsItemTypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -5963,6 +6088,28 @@ export const GetGoal200GoalRecurrence = {
   none: 'none',
   yearly: 'yearly',
 } as const;
+
+/**
+ * @nullable
+ */
+export type GetGoal200GoalGoalType = typeof GetGoal200GoalGoalType[keyof typeof GetGoal200GoalGoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoal200GoalGoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type GetGoal200GoalTypeData = {[key: string]: unknown};
 
 export type GetGoal200Goal = {
   /**
@@ -6025,6 +6172,9 @@ export type GetGoal200Goal = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: GetGoal200GoalGoalType;
+  typeData: GetGoal200GoalTypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -6054,6 +6204,8 @@ export type GetGoal200PartsItem = {
   goalId: number;
   name: string;
   amount: number;
+  /** @nullable */
+  dueAt: number | null;
   /** @nullable */
   paidAt: number | null;
   /**
@@ -6153,6 +6305,28 @@ export const UpdateGoalBodyRecurrence = {
   yearly: 'yearly',
 } as const;
 
+/**
+ * @nullable
+ */
+export type UpdateGoalBodyGoalType = typeof UpdateGoalBodyGoalType[keyof typeof UpdateGoalBodyGoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalBodyGoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type UpdateGoalBodyTypeData = {[key: string]: unknown};
+
 export type UpdateGoalBodyStatus = typeof UpdateGoalBodyStatus[keyof typeof UpdateGoalBodyStatus];
 
 
@@ -6248,6 +6422,9 @@ export type UpdateGoalBody = {
    * @nullable
    */
   categorySince?: number | null;
+  /** @nullable */
+  goalType?: UpdateGoalBodyGoalType;
+  typeData?: UpdateGoalBodyTypeData;
   status?: UpdateGoalBodyStatus;
   paused?: boolean;
   /**
@@ -6284,6 +6461,28 @@ export const UpdateGoal200Recurrence = {
   none: 'none',
   yearly: 'yearly',
 } as const;
+
+/**
+ * @nullable
+ */
+export type UpdateGoal200GoalType = typeof UpdateGoal200GoalType[keyof typeof UpdateGoal200GoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoal200GoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type UpdateGoal200TypeData = {[key: string]: unknown};
 
 export type UpdateGoal200 = {
   /**
@@ -6346,6 +6545,9 @@ export type UpdateGoal200 = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: UpdateGoal200GoalType;
+  typeData: UpdateGoal200TypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -6460,6 +6662,28 @@ export const AllocateToGoal200Recurrence = {
   yearly: 'yearly',
 } as const;
 
+/**
+ * @nullable
+ */
+export type AllocateToGoal200GoalType = typeof AllocateToGoal200GoalType[keyof typeof AllocateToGoal200GoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AllocateToGoal200GoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type AllocateToGoal200TypeData = {[key: string]: unknown};
+
 export type AllocateToGoal200 = {
   /**
    * @minimum -9007199254740991
@@ -6521,6 +6745,9 @@ export type AllocateToGoal200 = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: AllocateToGoal200GoalType;
+  typeData: AllocateToGoal200TypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -6605,6 +6832,28 @@ export const SpendFromGoal200Recurrence = {
   yearly: 'yearly',
 } as const;
 
+/**
+ * @nullable
+ */
+export type SpendFromGoal200GoalType = typeof SpendFromGoal200GoalType[keyof typeof SpendFromGoal200GoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const SpendFromGoal200GoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type SpendFromGoal200TypeData = {[key: string]: unknown};
+
 export type SpendFromGoal200 = {
   /**
    * @minimum -9007199254740991
@@ -6666,6 +6915,9 @@ export type SpendFromGoal200 = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: SpendFromGoal200GoalType;
+  typeData: SpendFromGoal200TypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -6734,6 +6986,28 @@ export const CompleteGoal200Recurrence = {
   yearly: 'yearly',
 } as const;
 
+/**
+ * @nullable
+ */
+export type CompleteGoal200GoalType = typeof CompleteGoal200GoalType[keyof typeof CompleteGoal200GoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CompleteGoal200GoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type CompleteGoal200TypeData = {[key: string]: unknown};
+
 export type CompleteGoal200 = {
   /**
    * @minimum -9007199254740991
@@ -6795,6 +7069,9 @@ export type CompleteGoal200 = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: CompleteGoal200GoalType;
+  typeData: CompleteGoal200TypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -6853,6 +7130,28 @@ export const ReopenGoal200Recurrence = {
   none: 'none',
   yearly: 'yearly',
 } as const;
+
+/**
+ * @nullable
+ */
+export type ReopenGoal200GoalType = typeof ReopenGoal200GoalType[keyof typeof ReopenGoal200GoalType] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReopenGoal200GoalType = {
+  emergency: 'emergency',
+  trip: 'trip',
+  house: 'house',
+  wedding: 'wedding',
+  umrah: 'umrah',
+  education: 'education',
+  gadget: 'gadget',
+  'vehicle-tax': 'vehicle-tax',
+  insurance: 'insurance',
+  lebaran: 'lebaran',
+} as const;
+
+export type ReopenGoal200TypeData = {[key: string]: unknown};
 
 export type ReopenGoal200 = {
   /**
@@ -6915,6 +7214,9 @@ export type ReopenGoal200 = {
   categoryId: number | null;
   /** @nullable */
   categorySince: number | null;
+  /** @nullable */
+  goalType: ReopenGoal200GoalType;
+  typeData: ReopenGoal200TypeData;
   setAside: number;
   setAsideThisMonth: number;
   /**
@@ -6947,6 +7249,12 @@ export type AddGoalPartBody = {
    * @maximum 10000000000000
    */
   amount: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  dueAt?: number | null;
 };
 
 export type AddGoalPart201 = {
@@ -6962,6 +7270,8 @@ export type AddGoalPart201 = {
   goalId: number;
   name: string;
   amount: number;
+  /** @nullable */
+  dueAt: number | null;
   /** @nullable */
   paidAt: number | null;
   /**
@@ -6998,6 +7308,12 @@ export type UpdateGoalPartBody = {
    * @maximum 10000000000000
    */
   amount?: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  dueAt?: number | null;
   paid?: boolean;
   /**
    * @minimum -9007199254740991
@@ -7019,6 +7335,8 @@ export type UpdateGoalPart200 = {
   goalId: number;
   name: string;
   amount: number;
+  /** @nullable */
+  dueAt: number | null;
   /** @nullable */
   paidAt: number | null;
   /**

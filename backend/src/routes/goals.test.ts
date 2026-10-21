@@ -221,6 +221,18 @@ describe("goals", () => {
     expect((await app.inject({ method: "GET", url: `/api/goals/${trip.id}` })).json().categoryName).toBe("Travel");
   });
 
+  it("keeps a goal's type and that type's figures, and a part's due date", async () => {
+    const house = (await post("/api/goals", { name: "House", targetAmount: 170_000_000, goalType: "house", typeData: { price: 850_000_000, dpShare: 20 } })).json();
+    expect(house).toMatchObject({ goalType: "house", typeData: { price: 850_000_000, dpShare: 20 } });
+    expect((await post("/api/goals", { name: "Bad", targetAmount: 1, goalType: "yacht" })).statusCode).toBe(400);
+    const changed = (await patch(`/api/goals/${house.id}`, { typeData: { price: 900_000_000 } })).json();
+    expect(changed.typeData).toEqual({ price: 900_000_000 });
+    expect((await patch(`/api/goals/${house.id}`, { goalType: null })).json().goalType).toBeNull();
+    const term = (await post(`/api/goals/${house.id}/parts`, { name: "Term 1", amount: 12_000_000, dueAt: new Date(2027, 0, 10).getTime() })).json();
+    expect(term.dueAt).toBe(new Date(2027, 0, 10).getTime());
+    expect((await patch(`/api/goal-parts/${term.id}`, { dueAt: null })).json().dueAt).toBeNull();
+  });
+
   it("sums up each goal over a period for the monthly report", async () => {
     const { goalsForPeriod } = await import("../services/goals");
     const trip = (await post("/api/goals", { name: "Trip", targetAmount: 10_000_000, setAside: 4_000_000 })).json();

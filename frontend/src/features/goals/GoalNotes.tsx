@@ -42,7 +42,12 @@ const markdownOf = (editor: Editor): string => (editor.storage.markdown as { get
  * heading, - [ ] for a checklist, **bold**), `/` offers blocks, selecting text shows a small
  * toolbar, and every change saves by itself. Stored as markdown.
  */
-export function GoalNotes({ value, onSave }: { value: string | null; onSave: (next: string | null) => Promise<void> }) {
+export function GoalNotes({ value, onSave, starter }: {
+  value: string | null;
+  onSave: (next: string | null) => Promise<void>;
+  /** Notes an empty page can start from, for its kind of goal. */
+  starter?: { label: string; markdown: string };
+}) {
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [slash, setSlash] = useState<SlashState | null>(null);
   const [empty, setEmpty] = useState(!value?.trim());
@@ -223,7 +228,7 @@ export function GoalNotes({ value, onSave }: { value: string | null; onSave: (ne
 
       {empty && !editor.isFocused && (
         <div className="mt-2 flex flex-wrap gap-2">
-          <button type="button" onClick={() => editor.chain().focus().setContent(OUTLINE).run()} className="h-[30px] rounded-lg border border-[var(--color-border)] px-2.5 text-xs font-semibold text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]">Start from an outline</button>
+          <button type="button" onClick={() => editor.chain().focus().setContent(starter?.markdown ?? OUTLINE).run()} className="h-[30px] rounded-lg border border-[var(--color-border)] px-2.5 text-xs font-semibold text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]">{starter ? `Start from the ${starter.label.toLowerCase()} notes` : 'Start from an outline'}</button>
           <button type="button" onClick={() => editor.chain().focus().toggleTaskList().run()} className="h-[30px] rounded-lg border border-[var(--color-border)] px-2.5 text-xs font-semibold text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)]">Add a checklist</button>
         </div>
       )}

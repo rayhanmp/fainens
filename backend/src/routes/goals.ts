@@ -5,7 +5,7 @@ import { z } from "zod";
 import { db } from "../db/client";
 import { accounts, categories, goalAllocations, goalAttachments, goalParts, goalSettings, savingsGoals, storageDeletionOutbox, transactions, wishlist } from "../db/schema";
 import { milestones, streak } from "../services/goal-progress";
-import { allocate, completeGoal, fundMonthly, GoalError, goalsOverview, setAsideByGoal, setExcludedAccountIds, spendFromGoal } from "../services/goals";
+import { allocate, completeGoal, fundMonthly, GOAL_TYPES, GoalError, goalsOverview, setAsideByGoal, setExcludedAccountIds, spendFromGoal } from "../services/goals";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
 import { queueFileCleanup } from "./goal-files";
 
@@ -41,6 +41,8 @@ const goalSchema = z.object({
   recurrence: recurrenceSchema,
   categoryId: z.number().int().nullable(),
   categorySince: z.number().nullable(),
+  goalType: z.enum(GOAL_TYPES).nullable(),
+  typeData: z.record(z.string(), z.unknown()),
   setAside: z.number(),
   setAsideThisMonth: z.number(),
   reachMonths: z.number().int().nullable(),
@@ -72,6 +74,7 @@ const partSchema = z.object({
   goalId: z.number().int(),
   name: z.string(),
   amount: z.number(),
+  dueAt: z.number().nullable(),
   paidAt: z.number().nullable(),
   transactionId: z.number().int().nullable(),
   sortOrder: z.number().int(),
@@ -117,6 +120,9 @@ const goalFields = {
   recurrence: recurrenceSchema.optional(),
   categoryId: z.number().int().positive().nullable().optional(),
   categorySince: z.number().int().positive().nullable().optional(),
+  goalType: z.enum(GOAL_TYPES).nullable().optional(),
+  /** That type's own figures, replaced as a whole; kept small. */
+  typeData: z.record(z.string(), z.unknown()).refine((value) => JSON.stringify(value).length <= 16_000, "Too much detail for one goal").optional(),
 };
 const goalBody = z.object({
   ...goalFields,
@@ -128,7 +134,7 @@ const goalPatch = z.object(goalFields).partial().extend({
   paused: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 }).strict();
-const partBody = z.object({ name: z.string().trim().min(1).max(120), amount }).strict();
+const partBody = z.object({ name: z.string().trim().min(1).max(120), amount, dueAt: z.number().int().positive().nullable().optional() }).strict();
 
 async function checkWishlist(wishlistId: number | null | undefined) {
   if (wishlistId == null) return;
@@ -163,9 +169,10 @@ async function checkLinks(body: { wishlistId?: number | null; accountId?: number
 
 /** Turns the body's fields into column values: dates become dates, and a category starts counting today. */
 function columns(body: Partial<z.infer<typeof goalPatch>>, existing?: typeof savingsGoals.$inferSelect) {
-  const { byDate, categorySince, paused, ...rest } = body;
+  const { byDate, categorySince, paused, typeData, ...rest } = body;
   const values: Record<string, unknown> = { ...rest };
   if (byDate !== undefined) values.byDate = byDate ? new Date(byDate) : null;
+  if (typeData !== undefined) values.typeData = JSON.stringify(typeData);
   if (body.categoryId !== undefined) {
     // Expenses count from when the category is chosen, unless you say from when.
     const since = categorySince ?? (body.categoryId && body.categoryId !== existing?.categoryId ? Date.now() : existing?.categorySince?.getTime() ?? null);
@@ -191,6 +198,7 @@ const partView = (row: typeof goalParts.$inferSelect) => ({
   goalId: row.goalId,
   name: row.name,
   amount: row.amount,
+  dueAt: row.dueAt ? row.dueAt.getTime() : null,
   paidAt: row.paidAt ? row.paidAt.getTime() : null,
   transactionId: row.transactionId ?? null,
   sortOrder: row.sortOrder,
@@ -458,7 +466,7 @@ export default async function (fastify: FastifyInstance) {
     await oneGoal(id);
     const body = request.body as z.infer<typeof partBody>;
     const [{ next }] = await db.select({ next: sql<number>`coalesce(max(${goalParts.sortOrder}), -1) + 1` }).from(goalParts).where(eq(goalParts.goalId, id));
-    const [created] = await db.insert(goalParts).values({ goalId: id, name: body.name, amount: body.amount, sortOrder: Number(next) }).returning();
+    const [created] = await db.insert(goalParts).values({ goalId: id, name: body.name, amount: body.amount, dueAt: body.dueAt ? new Date(body.dueAt) : null, sortOrder: Number(next) }).returning();
     return reply.code(201).send(partView(created));
   }));
 
@@ -472,10 +480,14 @@ export default async function (fastify: FastifyInstance) {
     },
   }, async (request, reply) => guarded(reply, async () => {
     const { id } = request.params as z.infer<typeof idParams>;
-    const { paid, ...rest } = request.body as Partial<z.infer<typeof partBody>> & { paid?: boolean; sortOrder?: number };
+    const { paid, dueAt, ...rest } = request.body as Partial<z.infer<typeof partBody>> & { paid?: boolean; sortOrder?: number };
     const [existing] = await db.select().from(goalParts).where(eq(goalParts.id, id)).limit(1);
     if (!existing) throw new GoalError("Part not found", 404);
-    const [updated] = await db.update(goalParts).set({ ...rest, ...(paid !== undefined ? { paidAt: paid ? (existing.paidAt ?? new Date()) : null } : {}) }).where(eq(goalParts.id, id)).returning();
+    const [updated] = await db.update(goalParts).set({
+      ...rest,
+      ...(dueAt !== undefined ? { dueAt: dueAt ? new Date(dueAt) : null } : {}),
+      ...(paid !== undefined ? { paidAt: paid ? (existing.paidAt ?? new Date()) : null } : {}),
+    }).where(eq(goalParts.id, id)).returning();
     return partView(updated);
   }));
 

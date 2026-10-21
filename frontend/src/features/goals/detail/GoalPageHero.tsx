@@ -1,8 +1,10 @@
+import type { ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { ArrowLeft, Flame, Pause, Pencil, Play, Plus, Receipt, ShoppingBag } from 'lucide-react';
 import { BalanceVisibilityToggle } from '../../../components/ui/BalanceVisibilityToggle';
 import { useBalanceVisibility } from '../../../hooks/useBalanceVisibility';
 import { cn } from '../../../lib/utils';
+import { GOAL_TYPES, isGoalTypeKey } from '../goal-types';
 import { goalFileUrl, type GoalDetail } from '../queries';
 import { monthsUntil } from '../pace';
 import { GoalEnvelope } from './GoalEnvelope';
@@ -17,9 +19,13 @@ const whiteButton = 'inline-flex h-[34px] items-center gap-1.5 rounded-lg px-3 t
  * reached), when it gets there at its monthly amount, its streak, and what you can do with it. Its
  * cover picture, when it has one, fills the right side; otherwise its envelope does.
  */
-export function GoalPageHero({ detail, color, onPutIn, onTakeOut, onPay, onBought, onPause, onEdit, pausing }: {
+export function GoalPageHero({ detail, color, headline, art, onPutIn, onTakeOut, onPay, onBought, onPause, onEdit, pausing }: {
   detail: GoalDetail;
   color: string;
+  /** Its type's headline, like "143 days to go". */
+  headline: string | null;
+  /** Its type's own illustration, in place of the envelope. */
+  art?: ReactNode;
   onPutIn: () => void;
   onTakeOut: () => void;
   onPay: () => void;
@@ -66,12 +72,15 @@ export function GoalPageHero({ detail, color, onPutIn, onTakeOut, onPay, onBough
             <div className="min-w-0">
               <h1 className="truncate font-headline text-2xl font-extrabold sm:text-3xl">{goal.name}</h1>
               <p className="mt-1 flex flex-wrap gap-1.5">
-                {[goal.kind === 'spend' ? 'To buy' : 'To keep', goal.recurrence === 'yearly' ? 'Every year' : null, goal.paused ? 'Paused' : null, goal.status === 'done' ? 'Finished' : null, goal.status === 'archived' ? 'Archived' : null]
+                {[isGoalTypeKey(goal.goalType) ? GOAL_TYPES[goal.goalType].label : null, goal.kind === 'spend' ? 'To buy' : 'To keep', goal.recurrence === 'yearly' ? 'Every year' : null, goal.paused ? 'Paused' : null, goal.status === 'done' ? 'Finished' : null, goal.status === 'archived' ? 'Archived' : null]
                   .filter(Boolean)
                   .map((chip) => <span key={chip} className="rounded-full bg-[#fff]/15 px-2 py-0.5 text-[11px] font-semibold">{chip}</span>)}
               </p>
             </div>
           </div>
+
+          {/* The figure that matters most for this kind of goal, like days to go or months covered. */}
+          {headline && <p className="mt-5 font-headline text-lg font-bold text-amber-100 sm:text-xl">{headline}</p>}
 
           <p className="mt-6 flex flex-wrap items-baseline gap-x-2">
             <span className="flex items-baseline gap-x-1.5 whitespace-nowrap">
@@ -127,7 +136,7 @@ export function GoalPageHero({ detail, color, onPutIn, onTakeOut, onPay, onBough
             </div>
           )}
         </div>
-        {!goal.coverAttachmentId && <div className="-mb-4 hidden shrink-0 self-end md:block"><GoalEnvelope color={color} fill={progress} icon={goal.icon} /></div>}
+        {!goal.coverAttachmentId && <div className="-mb-4 hidden shrink-0 self-end md:block">{art ?? <GoalEnvelope color={color} fill={progress} icon={goal.icon} />}</div>}
       </div>
     </section>
   );

@@ -10931,6 +10931,26 @@
                             "nullable": true,
                             "type": "number"
                           },
+                          "goalType": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "emergency",
+                              "trip",
+                              "house",
+                              "wedding",
+                              "umrah",
+                              "education",
+                              "gadget",
+                              "vehicle-tax",
+                              "insurance",
+                              "lebaran"
+                            ]
+                          },
+                          "typeData": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
                           "setAside": {
                             "type": "number"
                           },
@@ -10974,6 +10994,8 @@
                           "recurrence",
                           "categoryId",
                           "categorySince",
+                          "goalType",
+                          "typeData",
                           "setAside",
                           "setAsideThisMonth",
                           "reachMonths",
@@ -11116,6 +11138,26 @@
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
+                  "goalType": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "emergency",
+                      "trip",
+                      "house",
+                      "wedding",
+                      "umrah",
+                      "education",
+                      "gadget",
+                      "vehicle-tax",
+                      "insurance",
+                      "lebaran"
+                    ]
+                  },
+                  "typeData": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
                   "setAside": {
                     "type": "integer",
                     "minimum": 0,
@@ -11246,6 +11288,26 @@
                       "nullable": true,
                       "type": "number"
                     },
+                    "goalType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "emergency",
+                        "trip",
+                        "house",
+                        "wedding",
+                        "umrah",
+                        "education",
+                        "gadget",
+                        "vehicle-tax",
+                        "insurance",
+                        "lebaran"
+                      ]
+                    },
+                    "typeData": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
                     "setAside": {
                       "type": "number"
                     },
@@ -11289,6 +11351,8 @@
                     "recurrence",
                     "categoryId",
                     "categorySince",
+                    "goalType",
+                    "typeData",
                     "setAside",
                     "setAsideThisMonth",
                     "reachMonths",
@@ -11534,6 +11598,26 @@
                             "nullable": true,
                             "type": "number"
                           },
+                          "goalType": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "emergency",
+                              "trip",
+                              "house",
+                              "wedding",
+                              "umrah",
+                              "education",
+                              "gadget",
+                              "vehicle-tax",
+                              "insurance",
+                              "lebaran"
+                            ]
+                          },
+                          "typeData": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
                           "setAside": {
                             "type": "number"
                           },
@@ -11577,6 +11661,8 @@
                           "recurrence",
                           "categoryId",
                           "categorySince",
+                          "goalType",
+                          "typeData",
                           "setAside",
                           "setAsideThisMonth",
                           "reachMonths",
@@ -11896,6 +11982,26 @@
                             "nullable": true,
                             "type": "number"
                           },
+                          "goalType": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "emergency",
+                              "trip",
+                              "house",
+                              "wedding",
+                              "umrah",
+                              "education",
+                              "gadget",
+                              "vehicle-tax",
+                              "insurance",
+                              "lebaran"
+                            ]
+                          },
+                          "typeData": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          },
                           "setAside": {
                             "type": "number"
                           },
@@ -11939,6 +12045,8 @@
                           "recurrence",
                           "categoryId",
                           "categorySince",
+                          "goalType",
+                          "typeData",
                           "setAside",
                           "setAsideThisMonth",
                           "reachMonths",
@@ -12127,6 +12235,26 @@
                           "nullable": true,
                           "type": "number"
                         },
+                        "goalType": {
+                          "nullable": true,
+                          "type": "string",
+                          "enum": [
+                            "emergency",
+                            "trip",
+                            "house",
+                            "wedding",
+                            "umrah",
+                            "education",
+                            "gadget",
+                            "vehicle-tax",
+                            "insurance",
+                            "lebaran"
+                          ]
+                        },
+                        "typeData": {
+                          "type": "object",
+                          "additionalProperties": {}
+                        },
                         "setAside": {
                           "type": "number"
                         },
@@ -12170,6 +12298,8 @@
                         "recurrence",
                         "categoryId",
                         "categorySince",
+                        "goalType",
+                        "typeData",
                         "setAside",
                         "setAsideThisMonth",
                         "reachMonths",
@@ -12198,6 +12328,10 @@
                           "amount": {
                             "type": "number"
                           },
+                          "dueAt": {
+                            "nullable": true,
+                            "type": "number"
+                          },
                           "paidAt": {
                             "nullable": true,
                             "type": "number"
@@ -12219,6 +12353,7 @@
                           "goalId",
                           "name",
                           "amount",
+                          "dueAt",
                           "paidAt",
                           "transactionId",
                           "sortOrder"
@@ -12474,6 +12609,26 @@
                     "exclusiveMinimum": true,
                     "maximum": 9007199254740991
                   },
+                  "goalType": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "emergency",
+                      "trip",
+                      "house",
+                      "wedding",
+                      "umrah",
+                      "education",
+                      "gadget",
+                      "vehicle-tax",
+                      "insurance",
+                      "lebaran"
+                    ]
+                  },
+                  "typeData": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  },
                   "status": {
                     "type": "string",
                     "enum": [
@@ -12622,6 +12777,26 @@
                       "nullable": true,
                       "type": "number"
                     },
+                    "goalType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "emergency",
+                        "trip",
+                        "house",
+                        "wedding",
+                        "umrah",
+                        "education",
+                        "gadget",
+                        "vehicle-tax",
+                        "insurance",
+                        "lebaran"
+                      ]
+                    },
+                    "typeData": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
                     "setAside": {
                       "type": "number"
                     },
@@ -12665,6 +12840,8 @@
                     "recurrence",
                     "categoryId",
                     "categorySince",
+                    "goalType",
+                    "typeData",
                     "setAside",
                     "setAsideThisMonth",
                     "reachMonths",
@@ -13014,6 +13191,26 @@
                       "nullable": true,
                       "type": "number"
                     },
+                    "goalType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "emergency",
+                        "trip",
+                        "house",
+                        "wedding",
+                        "umrah",
+                        "education",
+                        "gadget",
+                        "vehicle-tax",
+                        "insurance",
+                        "lebaran"
+                      ]
+                    },
+                    "typeData": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
                     "setAside": {
                       "type": "number"
                     },
@@ -13057,6 +13254,8 @@
                     "recurrence",
                     "categoryId",
                     "categorySince",
+                    "goalType",
+                    "typeData",
                     "setAside",
                     "setAsideThisMonth",
                     "reachMonths",
@@ -13298,6 +13497,26 @@
                       "nullable": true,
                       "type": "number"
                     },
+                    "goalType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "emergency",
+                        "trip",
+                        "house",
+                        "wedding",
+                        "umrah",
+                        "education",
+                        "gadget",
+                        "vehicle-tax",
+                        "insurance",
+                        "lebaran"
+                      ]
+                    },
+                    "typeData": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
                     "setAside": {
                       "type": "number"
                     },
@@ -13341,6 +13560,8 @@
                     "recurrence",
                     "categoryId",
                     "categorySince",
+                    "goalType",
+                    "typeData",
                     "setAside",
                     "setAsideThisMonth",
                     "reachMonths",
@@ -13563,6 +13784,26 @@
                       "nullable": true,
                       "type": "number"
                     },
+                    "goalType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "emergency",
+                        "trip",
+                        "house",
+                        "wedding",
+                        "umrah",
+                        "education",
+                        "gadget",
+                        "vehicle-tax",
+                        "insurance",
+                        "lebaran"
+                      ]
+                    },
+                    "typeData": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
                     "setAside": {
                       "type": "number"
                     },
@@ -13606,6 +13847,8 @@
                     "recurrence",
                     "categoryId",
                     "categorySince",
+                    "goalType",
+                    "typeData",
                     "setAside",
                     "setAsideThisMonth",
                     "reachMonths",
@@ -13809,6 +14052,26 @@
                       "nullable": true,
                       "type": "number"
                     },
+                    "goalType": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "emergency",
+                        "trip",
+                        "house",
+                        "wedding",
+                        "umrah",
+                        "education",
+                        "gadget",
+                        "vehicle-tax",
+                        "insurance",
+                        "lebaran"
+                      ]
+                    },
+                    "typeData": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
                     "setAside": {
                       "type": "number"
                     },
@@ -13852,6 +14115,8 @@
                     "recurrence",
                     "categoryId",
                     "categorySince",
+                    "goalType",
+                    "typeData",
                     "setAside",
                     "setAsideThisMonth",
                     "reachMonths",
@@ -13906,6 +14171,12 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 10000000000000
+                  },
+                  "dueAt": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
@@ -13953,6 +14224,10 @@
                     "amount": {
                       "type": "number"
                     },
+                    "dueAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "paidAt": {
                       "nullable": true,
                       "type": "number"
@@ -13974,6 +14249,7 @@
                     "goalId",
                     "name",
                     "amount",
+                    "dueAt",
                     "paidAt",
                     "transactionId",
                     "sortOrder"
@@ -14047,6 +14323,12 @@
                     "minimum": 0,
                     "maximum": 10000000000000
                   },
+                  "dueAt": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
                   "paid": {
                     "type": "boolean"
                   },
@@ -14097,6 +14379,10 @@
                     "amount": {
                       "type": "number"
                     },
+                    "dueAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "paidAt": {
                       "nullable": true,
                       "type": "number"
@@ -14118,6 +14404,7 @@
                     "goalId",
                     "name",
                     "amount",
+                    "dueAt",
                     "paidAt",
                     "transactionId",
                     "sortOrder"

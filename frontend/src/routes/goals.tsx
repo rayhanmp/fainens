@@ -79,7 +79,7 @@ function GoalsPage() {
   const starters = useMemo<GoalStarter[]>(() => {
     const list: GoalStarter[] = [];
     if (!overview?.goals.some((goal) => goal.name.trim().toLowerCase() === 'emergency fund')) {
-      list.push({ key: 'emergency', label: 'Emergency fund', detail: emergency > 0 ? `6× spending, ${compactRupiah(emergency)}` : undefined, draft: { name: 'Emergency fund', icon: '🛟', kind: 'keep', targetAmount: emergency || undefined } });
+      list.push({ key: 'emergency', label: 'Emergency fund', detail: emergency > 0 ? `6× spending, ${compactRupiah(emergency)}` : undefined, draft: { name: 'Emergency fund', icon: '🛟', goalType: 'emergency', kind: 'keep', targetAmount: emergency || undefined } });
     }
     const linked = new Set(overview?.goals.map((goal) => goal.wishlistId) ?? []);
     for (const item of wishlist.data?.items ?? []) {

@@ -39,6 +39,7 @@ const sampleGoal = {
   byDate: null, kind: 'keep' as const, status: 'active' as const, wishlistId: null, spentTransactionId: null, doneAt: null, setAsideThisMonth: 0,
   monthlyPercent: null, paused: false, icon: null, description: null, linkUrl: null, linkTitle: null, linkImage: null, accountId: null,
   expectedReturn: 0, recurrence: 'none' as const, categoryId: null, categorySince: null, reachMonths: null, coverAttachmentId: null,
+  goalType: null, typeData: {},
 };
 
 /** Rp45 juta in three accounts, Rp29 juta of it in an emergency fund and a laptop. */

@@ -15,6 +15,20 @@ import { previewSalaryPosting } from "./salary-posting";
 export type GoalKind = "spend" | "keep";
 export type GoalStatus = "active" | "done" | "archived";
 
+export const GOAL_TYPES = ["emergency", "trip", "house", "wedding", "umrah", "education", "gadget", "vehicle-tax", "insurance", "lebaran"] as const;
+export type GoalType = (typeof GOAL_TYPES)[number];
+export const isGoalType = (value: unknown): value is GoalType => typeof value === "string" && (GOAL_TYPES as readonly string[]).includes(value);
+
+/** A goal's type figures; anything that isn't a JSON object reads as none. */
+export function parseTypeData(value: unknown): Record<string, unknown> {
+  try {
+    const parsed = typeof value === "string" ? JSON.parse(value) : value;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
 function parseIds(value: unknown): number[] {
   try {
     const parsed = typeof value === "string" ? JSON.parse(value) : value;
@@ -98,6 +112,10 @@ export type GoalView = {
   recurrence: "none" | "yearly";
   categoryId: number | null;
   categorySince: number | null;
+  /** What kind of goal it is, which shapes its page; null when started blank. */
+  goalType: GoalType | null;
+  /** That type's own figures, like a house's price or a wedding's guest count. */
+  typeData: Record<string, unknown>;
   setAside: number;
   /** Set aside this calendar month; counts toward the monthly amount. */
   setAsideThisMonth: number;
@@ -143,6 +161,8 @@ export function goalView(row: typeof savingsGoals.$inferSelect, setAside: number
     recurrence: row.recurrence === "yearly" ? "yearly" : "none",
     categoryId: row.categoryId ?? null,
     categorySince: time(row.categorySince),
+    goalType: isGoalType(row.goalType) ? row.goalType : null,
+    typeData: parseTypeData(row.typeData),
     setAside,
     setAsideThisMonth: thisMonth,
     reachMonths: monthsToReach(setAside, row.targetAmount, paused ? 0 : monthlyAmount, expectedReturn),
