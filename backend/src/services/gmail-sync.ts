@@ -123,9 +123,31 @@ async function syncGmailConnectionOnce(ownerEmail: string, days: number): Promis
 
   const lastSyncedAt = new Date();
   await db.update(gmailConnections)
-    .set({ lastSyncedAt, updatedAt: lastSyncedAt })
+    .set({ lastSyncedAt, lastError: null, lastErrorAt: null, updatedAt: lastSyncedAt })
     .where(eq(gmailConnections.ownerEmail, ownerEmail));
   return { ownerEmail, imported, skipped, pendingIds, lastSyncedAt };
+}
+
+/** A sync failure in words for the person who connected Gmail. */
+export function gmailErrorText(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/invalid_grant|revoked|unauthori[sz]ed|invalid_token|401/i.test(message)) {
+    return "Google no longer lets Fainens read your Gmail. Connect it again.";
+  }
+  return `Gmail couldn't be checked: ${message}`;
+}
+
+/** Runs one sync and keeps why it failed on the connection, so the app can say so; a good sync clears it. */
+async function syncAndRecord(ownerEmail: string, days: number): Promise<GmailSyncResult | null> {
+  try {
+    return await syncGmailConnectionOnce(ownerEmail, days);
+  } catch (error) {
+    const now = new Date();
+    await db.update(gmailConnections)
+      .set({ lastError: gmailErrorText(error), lastErrorAt: now, updatedAt: now })
+      .where(eq(gmailConnections.ownerEmail, ownerEmail));
+    throw error;
+  }
 }
 
 // Prevent a manual sync and the background poll from processing the same
@@ -137,7 +159,7 @@ export function syncGmailConnection(ownerEmail: string, days = 30): Promise<Gmai
   const active = activeSyncs.get(normalizedOwnerEmail);
   if (active) return active;
 
-  const promise = syncGmailConnectionOnce(normalizedOwnerEmail, days).finally(() => {
+  const promise = syncAndRecord(normalizedOwnerEmail, days).finally(() => {
     if (activeSyncs.get(normalizedOwnerEmail) === promise) activeSyncs.delete(normalizedOwnerEmail);
   });
   activeSyncs.set(normalizedOwnerEmail, promise);
@@ -156,11 +178,17 @@ export async function pollConnectedGmail(): Promise<{ connections: number; impor
     .from(gmailConnections);
   let imported = 0;
   let skipped = 0;
+  let failed = 0;
   for (const connection of connections) {
-    const result = await syncGmailConnection(connection.ownerEmail, pollDays(connection.lastSyncedAt));
+    // One connection failing (its error is kept on it) doesn't stop the others.
+    const result = await syncGmailConnection(connection.ownerEmail, pollDays(connection.lastSyncedAt)).catch(() => {
+      failed += 1;
+      return null;
+    });
     if (!result) continue;
     imported += result.imported;
     skipped += result.skipped;
   }
+  if (failed && failed === connections.length) throw new Error("Gmail sync failed for every connection");
   return { connections: connections.length, imported, skipped };
 }

@@ -23787,6 +23787,11 @@ export type HandleGmailCallback500 = {
  */
 export type GetGmailStatus200LastSyncedAt = string | string | number | null;
 
+/**
+ * @nullable
+ */
+export type GetGmailStatus200LastErrorAt = string | string | number | null;
+
 export type GetGmailStatus200 = {
   connected: boolean;
   /**
@@ -23796,6 +23801,10 @@ export type GetGmailStatus200 = {
   email: string | null;
   /** @nullable */
   lastSyncedAt: GetGmailStatus200LastSyncedAt;
+  /** @nullable */
+  lastError: string | null;
+  /** @nullable */
+  lastErrorAt: GetGmailStatus200LastErrorAt;
   [key: string]: unknown;
 };
 

@@ -1307,6 +1307,9 @@ export const gmailConnections = sqliteTable("gmail_connection", {
   /** AES-256-GCM encrypted Google refresh token. */
   refreshToken: text("refresh_token").notNull(),
   lastSyncedAt: integer("last_synced_at", { mode: "timestamp_ms" }),
+  /** Why the last sync failed, in plain words, until one works again; null when it's fine. */
+  lastError: text("last_error"),
+  lastErrorAt: integer("last_error_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .notNull()
     .default(sql`(unixepoch('now') * 1000)`),

@@ -18,6 +18,9 @@ const statusSchema = z.object({
   connected: z.boolean(),
   email: z.string().email().nullable(),
   lastSyncedAt: z.union([z.date(), z.string(), z.number()]).nullable(),
+  /** Why the last sync failed, until one works again. */
+  lastError: z.string().nullable(),
+  lastErrorAt: z.union([z.date(), z.string(), z.number()]).nullable(),
 }).passthrough();
 const syncBodySchema = z.object({ days: z.coerce.number().int().min(1).max(365).default(30) }).passthrough();
 const syncResponseSchema = z.object({
@@ -37,9 +40,13 @@ function ownerEmail(request: FastifyRequest): string {
   return env.LOCAL_AUTH_BYPASS ? env.ALLOWED_EMAIL.toLowerCase() : sessionEmail;
 }
 
-function frontendRedirect(status: "connected" | "error"): string {
+/** Why connecting failed, for the app to say; the reasons are fixed so nothing else leaks into the URL. */
+type ConnectFailure = "wrong-account" | "no-refresh-token" | "failed";
+
+function frontendRedirect(status: "connected" | "error", reason?: ConnectFailure): string {
   const target = new URL("/transactions", env.FRONTEND_URL ?? new URL(env.GOOGLE_CALLBACK_URL).origin);
   target.searchParams.set("gmail", status);
+  if (reason) target.searchParams.set("gmailReason", reason);
   return target.toString();
 }
 
@@ -62,12 +69,13 @@ export default async function gmailRoutes(fastify: FastifyInstance) {
       const result = await fastify.googleGmailOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
       const raw = result as unknown as Record<string, unknown>;
       const token = (raw.token && typeof raw.token === "object" ? raw.token : raw) as { access_token?: string; refresh_token?: string };
-      if (!token.access_token) return reply.code(500).send({ error: "Gmail authorization did not return an access token" });
+      // Every way this can go wrong goes back to the app, which says what happened.
+      if (!token.access_token) return reply.redirect(frontendRedirect("error", "failed"));
 
       const signedInEmail = ownerEmail(request);
       const profile = await getGmailProfile(token.access_token);
       if (profile.emailAddress.toLowerCase() !== env.ALLOWED_EMAIL.toLowerCase()) {
-        return reply.code(403).send({ error: "Connected Gmail account is not the authorized Fainens account" });
+        return reply.redirect(frontendRedirect("error", "wrong-account"));
       }
 
       const [existing] = await db.select({ refreshToken: gmailConnections.refreshToken })
@@ -75,7 +83,7 @@ export default async function gmailRoutes(fastify: FastifyInstance) {
         .where(eq(gmailConnections.ownerEmail, signedInEmail))
         .limit(1);
       const refreshToken = token.refresh_token ?? existing?.refreshToken;
-      if (!refreshToken) return reply.code(500).send({ error: "Google did not return a refresh token; please connect Gmail again" });
+      if (!refreshToken) return reply.redirect(frontendRedirect("error", "no-refresh-token"));
 
       await db.insert(gmailConnections).values({
         ownerEmail: signedInEmail,
@@ -88,7 +96,7 @@ export default async function gmailRoutes(fastify: FastifyInstance) {
       return reply.redirect(frontendRedirect("connected"));
     } catch (error) {
       fastify.log.error({ err: error }, "Gmail OAuth callback failed");
-      return reply.redirect(frontendRedirect("error"));
+      return reply.redirect(frontendRedirect("error", "failed"));
     }
   });
 
@@ -96,7 +104,7 @@ export default async function gmailRoutes(fastify: FastifyInstance) {
     onRequest: [fastify.authenticate],
     schema: { operationId: "getGmailStatus", tags: ["integrations"], response: { 200: statusSchema, 401: errorSchema } },
   }, async (request) => {
-    const [connection] = await db.select({ googleEmail: gmailConnections.googleEmail, lastSyncedAt: gmailConnections.lastSyncedAt })
+    const [connection] = await db.select({ googleEmail: gmailConnections.googleEmail, lastSyncedAt: gmailConnections.lastSyncedAt, lastError: gmailConnections.lastError, lastErrorAt: gmailConnections.lastErrorAt })
       .from(gmailConnections)
       .where(eq(gmailConnections.ownerEmail, ownerEmail(request).toLowerCase()))
       .limit(1);
@@ -104,6 +112,8 @@ export default async function gmailRoutes(fastify: FastifyInstance) {
       connected: Boolean(connection),
       email: connection?.googleEmail ?? null,
       lastSyncedAt: connection?.lastSyncedAt ?? null,
+      lastError: connection?.lastError ?? null,
+      lastErrorAt: connection?.lastErrorAt ?? null,
     };
   });
 

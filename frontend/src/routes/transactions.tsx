@@ -57,14 +57,24 @@ function TransactionRowsSkeleton({ compact }: { compact: boolean }) {
   </div>;
 }
 
+/** Why connecting Gmail didn't work, by the reason the server sends back. */
+const GMAIL_CONNECT_FAILURES: Record<string, string> = {
+  'wrong-account': 'That Google account isn’t the one Fainens is set up for. Connect with the same account you sign in with.',
+  'no-refresh-token': 'Google didn’t give lasting access. Remove Fainens from your Google account’s third-party access, then connect again.',
+  failed: 'Something went wrong with Google. Try connecting again.',
+};
+
 export const Route = createFileRoute('/transactions')({
-  validateSearch: (search: Record<string, unknown>): { periodId?: string; accountId?: string; categoryId?: string; transactionId?: string; tagId?: string; action?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { periodId?: string; accountId?: string; categoryId?: string; transactionId?: string; tagId?: string; action?: string; gmail?: 'connected' | 'error'; gmailReason?: string } => ({
     periodId: typeof search.periodId === 'string' ? search.periodId : undefined,
     accountId: typeof search.accountId === 'string' ? search.accountId : undefined,
     categoryId: typeof search.categoryId === 'string' ? search.categoryId : undefined,
     transactionId: typeof search.transactionId === 'string' ? search.transactionId : undefined,
     tagId: typeof search.tagId === 'string' && /^\d+$/.test(search.tagId) ? search.tagId : undefined,
     action: typeof search.action === 'string' ? search.action : undefined,
+    // Where connecting Gmail sends you back, saying how it went.
+    gmail: search.gmail === 'connected' || search.gmail === 'error' ? search.gmail : undefined,
+    gmailReason: typeof search.gmailReason === 'string' ? search.gmailReason : undefined,
   }),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   beforeLoad: async ({ search }: { search: any }) => {
@@ -152,7 +162,7 @@ function downloadPageCsv(rows: TransactionRow[], categories: Category[]) {
 function TransactionsPage() {
   const { formatAmount, maskAmounts } = useBalanceVisibility();
   const isMobile = useMediaQuery('(max-width: 767px)');
-  const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string; categoryId?: string; tagId?: string; transactionId?: string; action?: string };
+  const search = useSearch({ from: '/transactions' }) as { periodId?: string; accountId?: string; categoryId?: string; tagId?: string; transactionId?: string; action?: string; gmail?: 'connected' | 'error'; gmailReason?: string };
   const navigate = useNavigate({ from: '/transactions' });
   const { confirm } = useConfirm();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -214,6 +224,15 @@ function TransactionsPage() {
   const transactionQuery = useTransactionList(transactionFilters);
   const pendingQuery = usePendingTransactionsQuery();
   const gmailStatusQuery = useQuery({ queryKey: ['integrations', 'gmail'], queryFn: api.gmail.status, staleTime: 5 * 60 * 1000 });
+  // Coming back from connecting Gmail: say how it went, then drop the note from the address.
+  const refetchGmailStatus = gmailStatusQuery.refetch;
+  useEffect(() => {
+    if (!search.gmail) return;
+    if (search.gmail === 'connected') toast.success('Gmail connected', 'New BNI transaction emails will come into Review pending.');
+    else toast.error('Gmail wasn’t connected', GMAIL_CONNECT_FAILURES[search.gmailReason ?? 'failed'] ?? GMAIL_CONNECT_FAILURES.failed);
+    void refetchGmailStatus();
+    navigate({ search: (previous) => ({ ...previous, gmail: undefined, gmailReason: undefined }), replace: true });
+  }, [search.gmail, search.gmailReason, refetchGmailStatus, navigate]);
   const deepLinkTransactionId = search.transactionId && Number.isSafeInteger(Number(search.transactionId))
     ? Number(search.transactionId)
     : null;
@@ -301,7 +320,7 @@ function TransactionsPage() {
   // Typing ahead of the debounce, or waiting on the server for a new search, both read as "searching".
   const isSearching = filterQuery.trim() !== debouncedQuery.trim() || (debouncedQuery.trim() !== '' && transactionQuery.isFetching);
   const openReimbursements = () => navigate({ to: '/reimbursements', search: { sourceTransactionId: undefined, expenseLineId: undefined, categoryId: undefined, amount: undefined } });
-  const gmailLabel = gmailStatusQuery.data?.connected ? 'Gmail sync' : 'Connect Gmail';
+  const gmailLabel = gmailStatusQuery.data?.connected ? (gmailStatusQuery.data.lastError ? 'Reconnect Gmail' : 'Gmail sync') : 'Connect Gmail';
 
   // The desktop row menu closes on an outside press or Escape, returning focus to its trigger.
   useEffect(() => {
@@ -373,6 +392,8 @@ function TransactionsPage() {
       }
     } catch (error) {
       toast.error('Gmail sync failed', errorMessage(error, 'Could not read Gmail.'));
+      // The failure is kept on the connection; show it in the dialog.
+      void gmailStatusQuery.refetch();
     } finally {
       setGmailSyncing(false);
     }
@@ -536,6 +557,12 @@ function TransactionsPage() {
               </div>
             </div>
           </div>
+          {gmailStatusQuery.data.lastError && (
+            <div role="alert" className="flex flex-col gap-3 rounded-2xl bg-[var(--color-danger)]/10 p-4 text-sm text-[var(--color-danger)] sm:flex-row sm:items-center sm:justify-between">
+              <span className="flex items-start gap-2"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />{gmailStatusQuery.data.lastError}{gmailStatusQuery.data.lastErrorAt ? ` (${formatGmailSyncTime(gmailStatusQuery.data.lastErrorAt)})` : ''}</span>
+              <Button type="button" size="sm" variant="secondary" onClick={() => window.location.assign(api.gmail.connectUrl())} className="shrink-0 rounded-full">Connect again</Button>
+            </div>
+          )}
           <p className="text-sm leading-relaxed text-[var(--color-text-secondary)]">Sync reads only transaction-success emails from <span className="font-semibold">wondr@bni.co.id</span>. It creates pending items for review; it does not post transactions automatically.</p>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button type="button" onClick={() => void handleGmailSync()} isLoading={gmailSyncing} disabled={gmailDisconnecting} className="flex-1 rounded-full">

@@ -1,8 +1,12 @@
 import Database from "better-sqlite3";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, resolve } from "path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+const migrationsFolder = resolve(__dirname, "..", "..", "drizzle");
 
 // Restoring replaces the whole database, so these tests run against a throwaway file: the path is
 // set before anything opens the database, and storage is replaced so nothing can be uploaded.
@@ -69,10 +73,18 @@ describe("restoring a backup", () => {
   });
 
   it("brings an older backup up to this version", async () => {
-    const file = await snapshot("older.db", (copy) => {
-      copy.exec("ALTER TABLE goal_plan DROP COLUMN color");
-      copy.prepare("DELETE FROM __drizzle_migrations WHERE created_at = (SELECT MAX(created_at) FROM __drizzle_migrations)").run();
-    });
+    // A backup from before goal plans had colours: the real migrations, run only up to 0058.
+    const folder = join(directory, "older-migrations");
+    mkdirSync(join(folder, "meta"), { recursive: true });
+    const journal = JSON.parse(readFileSync(join(migrationsFolder, "meta", "_journal.json"), "utf8")) as { entries: Array<{ idx: number; tag: string }> };
+    const older = journal.entries.filter((entry) => entry.idx <= 58);
+    for (const entry of older) copyFileSync(join(migrationsFolder, `${entry.tag}.sql`), join(folder, `${entry.tag}.sql`));
+    writeFileSync(join(folder, "meta", "_journal.json"), JSON.stringify({ ...journal, entries: older }));
+    const file = join(directory, "older.db");
+    const sqlite = new Database(file);
+    migrate(drizzle(sqlite), { migrationsFolder: folder });
+    sqlite.close();
+
     await m.backup.restoreDatabaseFromFile(file);
     const columns = (live().prepare("PRAGMA table_info('goal_plan')").all() as Array<{ name: string }>).map((column) => column.name);
     expect(columns).toContain("color");

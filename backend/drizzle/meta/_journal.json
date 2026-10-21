@@ -421,6 +421,13 @@
       "when": 1788180000000,
       "tag": "0059_goal_plan_color",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1788190000000,
+      "tag": "0060_gmail_connection_error",
+      "breakpoints": true
     }
   ]
 }

@@ -16,7 +16,15 @@ vi.mock("../db/client", () => ({ db: new Proxy({}, {
   },
 }) }));
 
-import { insertGmailPendingTransactionOnce, resolveFundingAccount } from "./gmail-sync";
+import { gmailErrorText, insertGmailPendingTransactionOnce, resolveFundingAccount } from "./gmail-sync";
+
+describe("Gmail sync errors", () => {
+  it("says access was lost in plain words, and passes other failures on", () => {
+    expect(gmailErrorText(new Error("invalid_grant: Token has been expired or revoked."))).toBe("Google no longer lets Fainens read your Gmail. Connect it again.");
+    expect(gmailErrorText(new Error("Request failed with status code 401"))).toMatch(/Connect it again/);
+    expect(gmailErrorText(new Error("socket hang up"))).toBe("Gmail couldn't be checked: socket hang up");
+  });
+});
 
 function createPendingTable(sqlite: InstanceType<typeof Database>) {
   const dialect = new SQLiteSyncDialect();

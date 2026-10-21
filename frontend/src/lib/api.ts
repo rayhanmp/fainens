@@ -480,6 +480,9 @@ export const api = {
       connected: boolean;
       email: string | null;
       lastSyncedAt: number | string | null;
+      /** Why the last sync failed, until one works again. */
+      lastError: string | null;
+      lastErrorAt: number | string | null;
     }>('/integrations/gmail/status'),
     connectUrl: () => `${API_BASE}/integrations/gmail/connect`,
     disconnect: () => fetchApi<void>('/integrations/gmail', { method: 'DELETE' }),

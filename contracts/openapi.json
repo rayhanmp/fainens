@@ -52390,12 +52390,33 @@
                           "type": "number"
                         }
                       ]
+                    },
+                    "lastError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "lastErrorAt": {
+                      "nullable": true,
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        }
+                      ]
                     }
                   },
                   "required": [
                     "connected",
                     "email",
-                    "lastSyncedAt"
+                    "lastSyncedAt",
+                    "lastError",
+                    "lastErrorAt"
                   ],
                   "additionalProperties": {}
                 }
