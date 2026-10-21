@@ -20,7 +20,7 @@ import { TripSettings } from './TripSettings';
 import { TodayPanel, TripRecap } from './TripStatus';
 import { CURRENCIES, dayLabel, daysBetween, nextUp, shortDate, tripLength, tripPhase, type NextItem } from './trip-utils';
 
-type Tab = 'overview' | 'bookings' | 'days' | 'people' | 'notes' | 'money';
+type Tab = 'overview' | 'bookings' | 'days' | 'people' | 'packing' | 'notes' | 'files';
 const ROLE: Record<string, string> = { leave: 'Leaves', arrive: 'Lands', 'check-in': 'Check in', 'check-out': 'Check out', on: '' };
 
 /** "10–16 Mar 2027", "28 Feb – 6 Mar 2027" or across years in full. */
@@ -86,7 +86,7 @@ function NextUp({ trip, now, go }: { trip: Trip; now: number; go: (tab: Tab) => 
   const open = [
     unpaid.length ? { key: 'unpaid', text: `${unpaid.length} booking${unpaid.length === 1 ? '' : 's'} not paid · ${formatAmount(unpaid.reduce((sum, booking) => sum + booking.rupiah, 0))}`, tab: 'bookings' as Tab } : null,
     ...cancelSoon.map((booking) => ({ key: `cancel-${booking.id}`, text: `Free cancellation for ${booking.title} ends ${shortDate(booking.cancelBy!)}`, tab: 'bookings' as Tab, warn: true })),
-    unpacked ? { key: 'packing', text: `${unpacked} thing${unpacked === 1 ? '' : 's'} to pack`, tab: 'people' as Tab } : null,
+    unpacked ? { key: 'packing', text: `${unpacked} thing${unpacked === 1 ? '' : 's'} to pack`, tab: 'packing' as Tab } : null,
   ].filter(Boolean) as Array<{ key: string; text: string; tab: Tab; warn?: boolean }>;
 
   return (
@@ -130,7 +130,7 @@ function GettingStarted({ trip, onEdit, go }: { trip: Trip; onEdit: () => void; 
     { label: 'Who’s going', done: trip.travellers.length > 0, act: () => go('people') },
     { label: 'Spending money a day', done: trip.basics.dailyBudget > 0, act: onEdit },
     { label: 'A first booking', done: trip.bookings.length > 0, act: () => go('bookings') },
-    { label: 'A packing list', done: trip.packing.length > 0, act: () => go('people') },
+    { label: 'A packing list', done: trip.packing.length > 0, act: () => go('packing') },
   ];
   const done = steps.filter((step) => step.done).length;
   if (done === steps.length) return null;
@@ -152,8 +152,9 @@ function GettingStarted({ trip, onEdit, go }: { trip: Trip; onEdit: () => void; 
 
 /**
  * A holiday goal's page below its top card: the trip in one line, then tabs: an overview (today's
- * plans on the trip, how it went after, the budget, what's next and what's left to set up),
- * bookings, the days, who's going and packing, notes, and the goal's money.
+ * plans on the trip, how it went after, the budget, what's next, what's left to set up, and the
+ * goal's own money: how it's growing and its breakdown), bookings, the days, who's going,
+ * packing, notes and files.
  */
 export function TripWorkspace({ detail, trip, now, color, canPay, onPayPart, onPayBreakdown }: {
   detail: GoalDetail;
@@ -172,9 +173,10 @@ export function TripWorkspace({ detail, trip, now, color, canPay, onPayPart, onP
     { key: 'overview', label: 'Overview' },
     { key: 'bookings', label: 'Bookings', count: trip.bookings.length },
     { key: 'days', label: 'Days', count: tripLength(trip.basics) || undefined },
-    { key: 'people', label: 'People & packing', count: trip.travellers.length || undefined },
+    { key: 'people', label: 'People', count: trip.travellers.length || undefined },
+    { key: 'packing', label: 'Packing', count: trip.packing.length ? trip.packing.filter((item) => !item.done).length || undefined : undefined },
     { key: 'notes', label: 'Notes' },
-    { key: 'money', label: 'Money' },
+    { key: 'files', label: 'Files', count: detail.attachments.length || undefined },
   ];
   const go = (next: Tab) => setTab(next);
 
@@ -209,6 +211,9 @@ export function TripWorkspace({ detail, trip, now, color, canPay, onPayPart, onP
             <GettingStarted trip={trip} onEdit={() => setEditing(true)} go={go} />
           </div>
         </div>
+        {/* The goal's own money, always on the page it opens to. */}
+        <GrowthChart detail={detail} color={color} />
+        <PartsSection detail={detail} onPay={onPayBreakdown} />
       </div>
       <div role="tabpanel" hidden={tab !== 'bookings'}>
         <BookingsSection goalId={goal.id} trip={trip} files={detail.attachments} canPay={canPay} onPay={onPayPart} now={now} />
@@ -216,18 +221,16 @@ export function TripWorkspace({ detail, trip, now, color, canPay, onPayPart, onP
       <div role="tabpanel" hidden={tab !== 'days'}>
         <ItinerarySection goalId={goal.id} goalName={goal.name} trip={trip} now={now} />
       </div>
-      <div role="tabpanel" hidden={tab !== 'people'} className="@container">
-        <div className="grid grid-cols-1 items-start gap-6 @3xl:grid-cols-2">
-          <PeopleSection goalId={goal.id} trip={trip} now={now} />
-          <PackingSection goalId={goal.id} trip={trip} />
-        </div>
+      <div role="tabpanel" hidden={tab !== 'people'}>
+        <PeopleSection goalId={goal.id} trip={trip} now={now} />
+      </div>
+      <div role="tabpanel" hidden={tab !== 'packing'}>
+        <PackingSection goalId={goal.id} trip={trip} />
       </div>
       <div role="tabpanel" hidden={tab !== 'notes'}>
         <NotesWorkspace key={goal.id} detail={detail} bookings={trip.bookings} />
       </div>
-      <div role="tabpanel" hidden={tab !== 'money'} className="space-y-6">
-        <GrowthChart detail={detail} color={color} />
-        <PartsSection detail={detail} onPay={onPayBreakdown} />
+      <div role="tabpanel" hidden={tab !== 'files'}>
         <FilesSection detail={detail} />
       </div>
 
