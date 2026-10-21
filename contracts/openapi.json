@@ -9740,6 +9740,12 @@
                                 },
                                 "spend": {
                                   "type": "boolean"
+                                },
+                                "saved": {
+                                  "default": 0,
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 10000000000000
                                 }
                               },
                               "required": [
@@ -9748,7 +9754,8 @@
                                 "amount",
                                 "byMonth",
                                 "potId",
-                                "spend"
+                                "spend",
+                                "saved"
                               ],
                               "additionalProperties": false
                             }
@@ -9953,6 +9960,12 @@
                             },
                             "spend": {
                               "type": "boolean"
+                            },
+                            "saved": {
+                              "default": 0,
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000000000
                             }
                           },
                           "required": [
@@ -10153,6 +10166,12 @@
                               },
                               "spend": {
                                 "type": "boolean"
+                              },
+                              "saved": {
+                                "default": 0,
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000000000000
                               }
                             },
                             "required": [
@@ -10161,7 +10180,8 @@
                               "amount",
                               "byMonth",
                               "potId",
-                              "spend"
+                              "spend",
+                              "saved"
                             ],
                             "additionalProperties": false
                           }
@@ -10386,6 +10406,12 @@
                             },
                             "spend": {
                               "type": "boolean"
+                            },
+                            "saved": {
+                              "default": 0,
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 10000000000000
                             }
                           },
                           "required": [
@@ -10594,6 +10620,12 @@
                               },
                               "spend": {
                                 "type": "boolean"
+                              },
+                              "saved": {
+                                "default": 0,
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000000000000
                               }
                             },
                             "required": [
@@ -10602,7 +10634,8 @@
                               "amount",
                               "byMonth",
                               "potId",
-                              "spend"
+                              "spend",
+                              "saved"
                             ],
                             "additionalProperties": false
                           }

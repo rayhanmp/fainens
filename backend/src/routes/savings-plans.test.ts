@@ -23,7 +23,7 @@ const inputs = {
     { id: "sbn", name: "SBN", start: 0, monthly: 2_000_000, raise: 5, returnRate: 6.3, uncertainty: "low" },
   ],
   events: [{ id: "thr", label: "THR", month: 6, amount: 5_000_000, yearly: true, potId: "sbn" }],
-  goals: [{ id: "house", name: "House down payment", amount: 150_000_000, byMonth: 60, potId: "sbn", spend: true }],
+  goals: [{ id: "house", name: "House down payment", amount: 150_000_000, byMonth: 60, potId: "sbn", spend: true, saved: 0 }],
 };
 
 describe("savings plans", () => {
@@ -88,6 +88,13 @@ describe("savings plans", () => {
       expect(response.statusCode).toBe(400);
     }
     expect((await app.inject({ method: "POST", url: "/api/savings-plans", payload: { name: "  ", inputs } })).statusCode).toBe(400);
+  });
+
+  it("reads a goal saved before set-aside amounts existed as having nothing set aside", async () => {
+    const { saved: _saved, ...older } = inputs.goals[0]!;
+    sqlite.prepare("INSERT INTO savings_plan (name, inputs) VALUES (?, ?)").run("Older", JSON.stringify({ ...inputs, goals: [older] }));
+    const listed = (await app.inject({ method: "GET", url: "/api/savings-plans" })).json();
+    expect(listed[0].inputs.goals[0].saved).toBe(0);
   });
 
   it("leaves out a stored plan that no longer parses", async () => {

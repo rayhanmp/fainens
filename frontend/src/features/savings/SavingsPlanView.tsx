@@ -136,13 +136,15 @@ export function SavingsPlanView() {
 
   const suggestions = useMemo<GoalSuggestion[]>(() => {
     const taken = new Set(inputs.goals.map((goal) => goal.id));
+    // A goal you made yourself with the same name counts too.
+    const names = new Set(inputs.goals.map((goal) => goal.name.trim().toLowerCase()));
     const list: GoalSuggestion[] = [];
-    if (ledger.saving && ledger.saving.averageSpending > 0 && !taken.has('emergency-fund')) {
+    if (ledger.saving && ledger.saving.averageSpending > 0 && !taken.has('emergency-fund') && !names.has('emergency fund')) {
       list.push({ key: 'emergency-fund', name: 'Emergency fund', amount: Math.round((ledger.saving.averageSpending * 6) / 100_000) * 100_000, byMonth: 12, spend: false, source: 'Six months of your spending, kept saved' });
     }
     for (const item of ledger.wishlist) {
       if (list.length >= 4) break;
-      if (!taken.has(`wishlist-${item.id}`)) list.push({ key: `wishlist-${item.id}`, name: item.name, amount: item.amount, byMonth: item.byMonth, spend: true, source: 'From your wishlist' });
+      if (!taken.has(`wishlist-${item.id}`) && !names.has(item.name.trim().toLowerCase())) list.push({ key: `wishlist-${item.id}`, name: item.name, amount: item.amount, byMonth: item.byMonth, spend: true, source: 'From your wishlist' });
     }
     return inputs.goals.length >= 20 ? [] : list;
   }, [inputs.goals, ledger.saving, ledger.wishlist]);
@@ -212,7 +214,8 @@ export function SavingsPlanView() {
     if (goal.potId === OWN_POT) {
       // A pot just for this goal, opened in the panel so its amounts are in view.
       const potId = newId();
-      setDraft(withOwnPot(inputs, goal, potId));
+      const previous = inputs.goals.find((item) => item.id === goal.id);
+      setDraft(withOwnPot(inputs, goal, potId, previous?.potId ?? selectedPot.id));
       setSelectedPotId(potId);
     } else {
       const exists = inputs.goals.some((item) => item.id === goal.id);
@@ -270,7 +273,7 @@ export function SavingsPlanView() {
 
           <GoalsPanel
             outlooks={outlooks}
-            pots={inputs.pots}
+            inputs={inputs}
             selectedId={selectedGoalId}
             onSelect={setSelectedGoalId}
             onAdd={() => setEditingGoal('new')}
@@ -281,7 +284,7 @@ export function SavingsPlanView() {
             }}
             onUseMonthly={(goal, monthly) => changePot(goal.potId, { monthly })}
             suggestions={suggestions}
-            onAddSuggestion={(suggestion) => saveGoal({ id: suggestion.key, name: suggestion.name.slice(0, 80), amount: suggestion.amount, byMonth: suggestion.byMonth, potId: selectedPot.id, spend: suggestion.spend })}
+            onAddSuggestion={(suggestion) => saveGoal({ id: suggestion.key, name: suggestion.name.slice(0, 80), amount: suggestion.amount, byMonth: suggestion.byMonth, potId: selectedPot.id, spend: suggestion.spend, saved: 0 })}
           />
 
           <SavedPlansPanel
@@ -303,7 +306,7 @@ export function SavingsPlanView() {
       </div>
 
       {editingEvent && <EventDialog event={editingEventValue} pots={inputs.pots} defaultPotId={selectedPot.id} onClose={() => setEditingEvent(null)} onSave={saveEvent} />}
-      {editingGoal && <GoalDialog goal={editingGoalValue} pots={inputs.pots} defaultPotId={selectedPot.id} onClose={() => setEditingGoal(null)} onSave={saveGoal} />}
+      {editingGoal && <GoalDialog goal={editingGoalValue} inputs={inputs} defaultPotId={selectedPot.id} onClose={() => setEditingGoal(null)} onSave={saveGoal} />}
       {naming?.kind === 'save' && <NameDialog title="Save plan" initial="" submitLabel="Save" busy={createPlan.isPending} onClose={() => setNaming(null)} onSave={(name) => void saveAs(name)} />}
       {naming?.kind === 'rename' && naming.plan && <NameDialog title="Rename plan" initial={naming.plan.name} submitLabel="Rename" busy={updatePlan.isPending} onClose={() => setNaming(null)} onSave={(name) => void rename(naming.plan!, name)} />}
     </>

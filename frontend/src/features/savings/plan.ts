@@ -26,8 +26,9 @@ export type PlanEvent = { id: string; label: string; month: number; amount: numb
 /**
  * Something to save for in today's rupiah, paid from pot `potId`, wanted by plan month `byMonth`
  * (null: whenever). `spend` goals are bought and leave the pot; the others are amounts to keep.
+ * `saved` is the part of the pot's money today already set aside for it.
  */
-export type PlanGoal = { id: string; name: string; amount: number; byMonth: number | null; potId: string; spend: boolean };
+export type PlanGoal = { id: string; name: string; amount: number; byMonth: number | null; potId: string; spend: boolean; saved: number };
 
 export type PlanInputs = {
   years: number;
@@ -101,43 +102,70 @@ export function potGoals(inputs: PlanInputs, potId: string): PlanGoal[] {
   return [...goals.filter((goal) => goal.byMonth !== null).sort((a, b) => a.byMonth! - b.byMonth!), ...goals.filter((goal) => goal.byMonth === null)];
 }
 
+/** The money set aside for each goal today, capped so a pot's goals never hold more than the pot. */
+export function setAside(inputs: PlanInputs, pot: PlanPot): Record<string, number> {
+  let left = pot.start;
+  const held: Record<string, number> = {};
+  for (const goal of potGoals(inputs, pot.id)) {
+    held[goal.id] = Math.max(0, Math.min(goal.saved, left));
+    left -= held[goal.id]!;
+  }
+  return held;
+}
+
+/** What's left of a pot's money today after what's set aside for its goals. */
+export function unallocated(inputs: PlanInputs, pot: PlanPot): number {
+  return pot.start - Object.values(setAside(inputs, pot)).reduce((sum, amount) => sum + amount, 0);
+}
+
 /**
  * One pot month by month. `growth` gives each month's growth factor (the pot's steady return
- * unless a random run passes its own). After each month, goals settle one at a time in order: a
- * kept goal is reached when the pot (in today's money) holds it on top of earlier kept goals, and
- * from then holds it back; a spent goal is bought, no earlier than its date, and its cost
- * (inflated to that month) leaves the pot.
+ * unless a random run passes its own). Money set aside for a goal grows with the pot and is only
+ * that goal's. After each month goals settle: any goal its own money covers is reached at once;
+ * otherwise the first goal in order may add the pot's unallocated money. A kept goal is then held
+ * back from later goals; a spent goal is bought, no earlier than its date, and its cost (inflated
+ * to that month) leaves the pot.
  */
 export function runPot(inputs: PlanInputs, pot: PlanPot, months: number, growth?: (month: number) => number): PotRun {
   const rate = monthlyRate(pot.returnRate);
   const events = inputs.events.filter((event) => event.potId === pot.id);
   const goals = potGoals(inputs, pot.id);
   const reached: Record<string, number> = {};
+  // Set-aside money per goal, in rupiah of the month.
+  const own = setAside(inputs, pot);
   let balance = pot.start;
   let deposits = pot.start;
   let withdrawals = 0;
   let realNetDeposits = pot.start;
   let emptiedAt: number | null = null;
-  let next = 0;
   // What kept goals hold back, in today's money: later goals can only use what's above it.
   let reserved = 0;
+  const held = () => goals.reduce((sum, goal) => sum + (reached[goal.id] === undefined ? own[goal.id] ?? 0 : 0), 0);
 
   const settle = (month: number, deflator: number) => {
-    while (next < goals.length) {
-      const goal = goals[next]!;
-      const free = balance / deflator - reserved;
-      if (goal.spend) {
-        if ((goal.byMonth !== null && month < goal.byMonth) || free < goal.amount) break;
-        const cost = goal.amount * deflator;
-        balance -= cost;
-        withdrawals += cost;
-        realNetDeposits -= goal.amount;
-      } else {
-        if (free < goal.amount) break;
-        reserved += goal.amount;
+    for (let changed = true; changed;) {
+      changed = false;
+      const first = goals.find((goal) => reached[goal.id] === undefined);
+      for (const goal of goals) {
+        if (reached[goal.id] !== undefined) continue;
+        if (goal.spend && goal.byMonth !== null && month < goal.byMonth) continue;
+        const mine = (own[goal.id] ?? 0) / deflator;
+        const free = goal === first ? Math.max(0, (balance - held()) / deflator - reserved) : 0;
+        if (mine + free < goal.amount) continue;
+        if (goal.spend) {
+          const cost = goal.amount * deflator;
+          balance -= cost;
+          withdrawals += cost;
+          realNetDeposits -= goal.amount;
+        } else {
+          reserved += goal.amount;
+        }
+        // Whatever was set aside beyond the goal goes back to the pot's unallocated money.
+        own[goal.id] = 0;
+        reached[goal.id] = month;
+        changed = true;
+        break;
       }
-      reached[goal.id] = month;
-      next += 1;
     }
   };
 
@@ -147,7 +175,9 @@ export function runPot(inputs: PlanInputs, pot: PlanPot, months: number, growth?
     const saving = savingInMonth(pot, month);
     const moved = eventsInMonth(events, month);
     const deflator = deflatorAt(inputs, month);
-    const before = balance * (growth ? growth(month) : 1 + rate) + saving + Math.max(0, moved);
+    const factor = growth ? growth(month) : 1 + rate;
+    const before = balance * factor + saving + Math.max(0, moved);
+    for (const id of Object.keys(own)) own[id] = own[id]! * factor;
     deposits += saving + Math.max(0, moved);
     // A withdrawal takes what is there and no more.
     const taken = Math.min(before, Math.max(0, -moved));
@@ -156,6 +186,9 @@ export function runPot(inputs: PlanInputs, pot: PlanPot, months: number, growth?
     // Money put in years from now is worth less today: deflate each amount at its own month.
     realNetDeposits += (saving + Math.max(0, moved) - taken) / deflator;
     balance = before - taken;
+    // A withdrawal bigger than the unallocated money eats into what's set aside, evenly.
+    const holding = held();
+    if (holding > balance && holding > 0) for (const id of Object.keys(own)) own[id] = own[id]! * (balance / holding);
     settle(month, deflator);
     rows.push({ month, balance, deposits, withdrawals, realNetDeposits, deflator });
   }
@@ -213,16 +246,22 @@ export function monthlyNeeded(inputs: PlanInputs, goal: PlanGoal): number | null
 }
 
 /**
- * The plan with `goal` (new or edited) saved into a pot of its own, named after it. A dated goal's
- * pot saves each month what reaches it on time; an undated one starts at zero for you to fill.
+ * The plan with `goal` (new or edited) saved into a pot of its own, named after it. What's set
+ * aside for it moves there from `fromPotId`, so the plan's money today stays the same. A dated
+ * goal's pot saves each month what reaches it on time; an undated one saves nothing until you fill it.
  */
-export function withOwnPot(inputs: PlanInputs, goal: PlanGoal, potId = newId()): PlanInputs {
-  const pot: PlanPot = { ...DEFAULT_POT, id: potId, name: goal.name };
-  const placed = { ...goal, potId };
+export function withOwnPot(inputs: PlanInputs, goal: PlanGoal, potId = newId(), fromPotId = inputs.pots[0]!.id): PlanInputs {
+  const from = inputs.pots.find((item) => item.id === fromPotId) ?? inputs.pots[0]!;
+  // The goal can take its own set-aside money from the old pot plus whatever there is unallocated.
+  const others = inputs.goals.filter((item) => item.id !== goal.id);
+  const free = unallocated({ ...inputs, goals: others }, from);
+  const moving = Math.max(0, Math.min(goal.saved, free));
+  const pot: PlanPot = { ...DEFAULT_POT, id: potId, name: goal.name, start: moving };
+  const placed = { ...goal, potId, saved: moving };
   const exists = inputs.goals.some((item) => item.id === goal.id);
   const next: PlanInputs = {
     ...inputs,
-    pots: [...inputs.pots, pot],
+    pots: [...inputs.pots.map((item) => (item.id === from.id ? { ...item, start: item.start - moving } : item)), pot],
     goals: exists ? inputs.goals.map((item) => (item.id === goal.id ? placed : item)) : [...inputs.goals, placed],
   };
   const monthly = goal.byMonth === null ? 0 : monthlyNeeded(next, placed) ?? 0;
@@ -397,7 +436,7 @@ export function normalizePlan(value: unknown): PlanInputs {
       if (typeof item.amount !== 'number' || !Number.isFinite(item.amount) || item.amount <= 0) return [];
       const name = text(item, 'name', '').trim();
       if (!name) return [];
-      return [{ id: id(item), name, amount: Math.round(Math.min(1e13, item.amount)), byMonth: month(item.byMonth), potId: potOf(item), spend: item.spend === true }];
+      return [{ id: id(item), name, amount: Math.round(Math.min(1e13, item.amount)), byMonth: month(item.byMonth), potId: potOf(item), spend: item.spend === true, saved: number(item, 'saved', 0, 0, 1e13, true) }];
     }).slice(0, 20),
   };
 }

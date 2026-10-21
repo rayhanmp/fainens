@@ -4655,6 +4655,11 @@ export type ListSavingsPlans200ItemInputsGoalsItem = {
    */
   potId: string;
   spend: boolean;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  saved: number;
 };
 
 export type ListSavingsPlans200ItemInputs = {
@@ -4790,6 +4795,11 @@ export type CreateSavingsPlanBodyInputsGoalsItem = {
    */
   potId: string;
   spend: boolean;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  saved?: number;
 };
 
 export type CreateSavingsPlanBodyInputs = {
@@ -4922,6 +4932,11 @@ export type CreateSavingsPlan201InputsGoalsItem = {
    */
   potId: string;
   spend: boolean;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  saved: number;
 };
 
 export type CreateSavingsPlan201Inputs = {
@@ -5062,6 +5077,11 @@ export type UpdateSavingsPlanBodyInputsGoalsItem = {
    */
   potId: string;
   spend: boolean;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  saved?: number;
 };
 
 export type UpdateSavingsPlanBodyInputs = {
@@ -5194,6 +5214,11 @@ export type UpdateSavingsPlan200InputsGoalsItem = {
    */
   potId: string;
   spend: boolean;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  saved: number;
 };
 
 export type UpdateSavingsPlan200Inputs = {

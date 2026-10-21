@@ -4,7 +4,8 @@ import { Modal } from '../../components/ui/Modal';
 import { Dropdown, Toggle } from '../settings/controls';
 import { Field, MoneyField, Segmented } from './fields';
 import { monthInputValue, parseMonthInput } from './input-format';
-import { MAX_MONTHS, MAX_POTS, monthDate, newId, planMonthOf, type PlanEvent, type PlanGoal, type PlanPot } from './plan';
+import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
+import { MAX_MONTHS, MAX_POTS, monthDate, newId, planMonthOf, unallocated, type PlanEvent, type PlanGoal, type PlanInputs, type PlanPot } from './plan';
 import { OWN_POT } from './pots';
 
 /** Which pot something belongs to; hidden while the plan has a single pot. */
@@ -70,11 +71,19 @@ export function EventDialog({ event, pots, defaultPotId, onClose, onSave }: { ev
   );
 }
 
-export function GoalDialog({ goal, pots, defaultPotId, onClose, onSave }: { goal: PlanGoal | null; pots: PlanPot[]; defaultPotId: string; onClose: () => void; onSave: (goal: PlanGoal) => void }) {
+export function GoalDialog({ goal, inputs, defaultPotId, onClose, onSave }: { goal: PlanGoal | null; inputs: PlanInputs; defaultPotId: string; onClose: () => void; onSave: (goal: PlanGoal) => void }) {
+  const { formatAmount } = useBalanceVisibility();
+  const pots = inputs.pots;
   const [potId, setPotId] = useState(goal?.potId ?? defaultPotId);
   const [spend, setSpend] = useState(goal?.spend ?? true);
   const [name, setName] = useState(goal?.name ?? '');
   const [amount, setAmount] = useState(goal?.amount ?? 0);
+  const [saved, setSaved] = useState(goal?.saved ?? 0);
+  // Set-aside money comes from the chosen pot, or for a pot of its own from the pot it's leaving.
+  const source = pots.find((pot) => pot.id === (potId === OWN_POT ? goal?.potId ?? defaultPotId : potId)) ?? pots[0]!;
+  // The most this goal can hold: the pot's unallocated money plus what it already holds there.
+  const free = unallocated({ ...inputs, goals: inputs.goals.filter((item) => item.id !== goal?.id) }, source);
+  const unclaimed = unallocated(inputs, source);
   const [dated, setDated] = useState(goal ? goal.byMonth !== null : true);
   const [month, setMonth] = useState(monthInputValue(monthDate(goal?.byMonth ?? 36)));
   const [error, setError] = useState<string | null>(null);
@@ -87,7 +96,8 @@ export function GoalDialog({ goal, pots, defaultPotId, onClose, onSave }: { goal
     if (dated && !date) return setError('Pick a month.');
     const byMonth = date ? planMonthOf(date) : null;
     if (byMonth !== null && byMonth > MAX_MONTHS) return setError('Pick a month within 50 years.');
-    onSave({ id: goal?.id ?? newId(), name: name.trim(), amount, byMonth, potId, spend });
+    if (saved > free) return setError(`Only ${formatAmount(free)} of ${source.name} isn’t set aside yet.`);
+    onSave({ id: goal?.id ?? newId(), name: name.trim(), amount, byMonth, potId, spend, saved });
   };
 
   return (
@@ -124,6 +134,23 @@ export function GoalDialog({ goal, pots, defaultPotId, onClose, onSave }: { goal
             ]}
             onChange={setPotId}
           />
+        </Field>
+        <Field
+          label="Already set aside"
+          htmlFor="goal-saved"
+          info="Part of the money you have today that’s already meant for this goal. It stays in the pot and grows with it, and no other goal can count it."
+          hint={free > 0
+            ? `Up to ${formatAmount(free)}. ${source.name} has ${formatAmount(unclaimed)} of its ${formatAmount(source.start)} not set aside for any goal${potId === OWN_POT ? '; this moves into the new pot' : ''}.`
+            : `Everything in ${source.name} today is already set aside for other goals.`}
+        >
+          <div className="flex gap-2">
+            <MoneyField id="goal-saved" value={saved} onChange={setSaved} />
+            {free > 0 && (
+              <Button type="button" size="sm" variant="secondary" className="h-[34px] shrink-0" onClick={() => setSaved(Math.min(free, amount || free))}>
+                {amount && amount < free ? 'Cover it all' : 'All that’s free'}
+              </Button>
+            )}
+          </div>
         </Field>
         <div className="space-y-1">
           <Segmented

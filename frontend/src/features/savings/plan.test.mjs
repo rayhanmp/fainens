@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DEFAULT_PLAN, DEFAULT_POT, compactRupiah, durationLabel, eventsInMonth, goalOutlooks, monthlyNeeded, normalizePlan, planRange, potGoals, recentSaving, runPlan, runPot, savingInMonth, withOwnPot } from './plan.ts';
+import { DEFAULT_PLAN, DEFAULT_POT, compactRupiah, durationLabel, eventsInMonth, goalOutlooks, monthlyNeeded, normalizePlan, planRange, potGoals, recentSaving, runPlan, runPot, savingInMonth, setAside, unallocated, withOwnPot } from './plan.ts';
 
 const pot = (overrides = {}) => ({ ...DEFAULT_POT, returnRate: 0, ...overrides });
 const plan = (overrides = {}, potOverrides = {}) => ({ ...DEFAULT_PLAN, inflation: 0, pots: [pot(potOverrides)], ...overrides });
 const last = (run) => run.months[run.months.length - 1];
-const goal = (overrides) => ({ id: 'g', name: 'Goal', amount: 1, byMonth: null, potId: DEFAULT_POT.id, spend: false, ...overrides });
+const goal = (overrides) => ({ id: 'g', name: 'Goal', amount: 1, byMonth: null, potId: DEFAULT_POT.id, spend: false, saved: 0, ...overrides });
 
 test('without returns or inflation the balance is what went in', () => {
   const run = runPlan(plan({ years: 2 }, { start: 1_000_000, monthly: 500_000 }));
@@ -119,6 +119,34 @@ test('the monthly saving needed reaches the goal by its date, with the pot’s e
   assert.equal(monthlyNeeded(plan({ goals: [goal({ amount: 50, byMonth: 12 })] }, { start: 60 }), goal({ amount: 50, byMonth: 12 })), 0);
 });
 
+test('money set aside today belongs to its goal; the rest is unallocated', () => {
+  // 45 juta today: 24 juta set aside for the emergency fund, the laptop saves from the other 21.
+  const goals = [goal({ id: 'fund', amount: 30_000_000, saved: 24_000_000 }), goal({ id: 'laptop', amount: 21_000_000, spend: true })];
+  const inputs = plan({ goals }, { start: 45_000_000, monthly: 1_000_000 });
+  assert.deepEqual(setAside(inputs, inputs.pots[0]), { fund: 24_000_000, laptop: 0 });
+  assert.equal(unallocated(inputs, inputs.pots[0]), 21_000_000);
+  const run = runPot(inputs, inputs.pots[0], 24);
+  // The fund comes first: its 24 juta plus 6 juta of the unallocated money reach it now.
+  assert.equal(run.reached.fund, 0);
+  // The laptop gets the other 15 juta and saves the last 6 at 1 juta a month, then leaves the pot.
+  assert.equal(run.reached.laptop, 6);
+  assert.equal(run.months[6].balance, 30_000_000);
+  // Without anything set aside the pot's order is the same, but nothing is held for the fund until it's reached.
+  const loose = plan({ goals: goals.map((item) => ({ ...item, saved: 0 })) }, { start: 45_000_000, monthly: 1_000_000 });
+  assert.equal(runPot(loose, loose.pots[0], 24).reached.fund, 0);
+});
+
+test('a goal its own money covers is reached at once, whatever its place in line', () => {
+  const goals = [goal({ id: 'house', amount: 100_000_000, byMonth: 12 }), goal({ id: 'phone', amount: 5_000_000, saved: 5_000_000 })];
+  const run = runPot(plan({ goals }), pot({ start: 5_000_000 }), 12);
+  assert.equal(run.reached.phone, 0);
+  // Other goals can't count the phone's money.
+  assert.equal(run.reached.house, undefined);
+  // A pot can't set aside more than it holds: later goals get what's left.
+  const over = plan({ goals: [goal({ id: 'a', saved: 8 }), goal({ id: 'b', saved: 8 })] }, { start: 10 });
+  assert.deepEqual(setAside(over, over.pots[0]), { a: 8, b: 2 });
+});
+
 test('a goal can get a pot of its own that saves exactly what it needs', () => {
   const inputs = plan({ goals: [goal({ id: 'fund', amount: 5_000_000 })] }, { start: 5_000_000, monthly: 1_000_000 });
   const car = goal({ id: 'car', name: 'Car', amount: 60_000_000, byMonth: 24, spend: true });
@@ -132,10 +160,16 @@ test('a goal can get a pot of its own that saves exactly what it needs', () => {
   assert.ok(reachWith(next.pots[1].monthly) <= 24);
   assert.ok(reachWith(next.pots[1].monthly - 2_000) > 24);
   assert.deepEqual(next.pots[0], inputs.pots[0]);
-  // Moving an existing goal keeps one copy of it; an undated goal's pot starts empty.
+  // Moving an existing goal keeps one copy of it; an undated goal's pot saves nothing until you fill it.
   const moved = withOwnPot(inputs, { ...inputs.goals[0], byMonth: null }, 'fund-pot');
   assert.equal(moved.goals.length, 1);
   assert.equal(moved.pots[1].monthly, 0);
+  // What's set aside moves with it, so the plan's money today stays the same.
+  const funded = withOwnPot(inputs, { ...inputs.goals[0], saved: 3_000_000 }, 'fund-pot', inputs.pots[0].id);
+  assert.deepEqual([funded.pots[0].start, funded.pots[1].start], [2_000_000, 3_000_000]);
+  // It can't take more than the old pot has unallocated.
+  const greedy = withOwnPot(inputs, { ...inputs.goals[0], saved: 9_000_000 }, 'fund-pot', inputs.pots[0].id);
+  assert.deepEqual([greedy.pots[0].start, greedy.pots[1].start], [0, 5_000_000]);
 });
 
 test('the range is the same every time, brackets the plan and gives goal chances', () => {
@@ -166,7 +200,7 @@ test('stored plans are cleaned up, and a plan from before pots becomes one pot',
   assert.deepEqual({ start: legacy.pots[0].start, monthly: legacy.pots[0].monthly, returnRate: legacy.pots[0].returnRate, uncertainty: legacy.pots[0].uncertainty }, { start: 0, monthly: 2_000_000, returnRate: 6, uncertainty: 'off' });
   assert.equal(legacy.years, 50);
   assert.deepEqual(legacy.events, [{ id: 'a', label: '', month: 2, amount: 3, yearly: true, potId: legacy.pots[0].id }]);
-  assert.deepEqual(legacy.goals, [{ id: 'h', name: 'Home', amount: 10, byMonth: null, potId: legacy.pots[0].id, spend: false }]);
+  assert.deepEqual(legacy.goals, [{ id: 'h', name: 'Home', amount: 10, byMonth: null, potId: legacy.pots[0].id, spend: false, saved: 0 }]);
   const current = normalizePlan({ pots: [{ id: 'x', name: 'SBN' }], goals: [{ id: 'g', name: 'Car', amount: 5, potId: 'gone', spend: true }] });
   assert.equal(current.goals[0].potId, 'x');
   assert.equal(current.goals[0].spend, true);

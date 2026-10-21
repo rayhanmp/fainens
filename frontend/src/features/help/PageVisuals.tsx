@@ -29,7 +29,7 @@ const SAMPLE_PLAN: PlanInputs = {
     { id: 'sample-sbn', name: 'SBN ritel', start: 0, monthly: 1_000_000, raise: 5, returnRate: 6.3, uncertainty: 'medium' },
   ],
   events: [{ id: 'sample-wedding', label: 'Wedding', month: 30, amount: -20_000_000, yearly: false, potId: 'sample-cash' }],
-  goals: [{ id: 'sample-house', name: 'House down payment', amount: 100_000_000, byMonth: 84, potId: 'sample-sbn', spend: false }],
+  goals: [{ id: 'sample-house', name: 'House down payment', amount: 100_000_000, byMonth: 84, potId: 'sample-sbn', spend: false, saved: 0 }],
 };
 
 /** The simulator’s How it grows card itself, the real chart and switch, drawn from a sample plan. */

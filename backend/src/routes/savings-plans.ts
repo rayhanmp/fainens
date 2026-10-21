@@ -35,7 +35,8 @@ const savingsPlanEventSchema = z.object({
 
 /**
  * Something to save for in today's rupiah, paid from a pot; `byMonth` is the month it's wanted
- * by, or null for "whenever"; `spend` goals leave the pot when bought.
+ * by, or null for "whenever"; `spend` goals leave the pot when bought; `saved` is what's set aside
+ * for it today.
  */
 const savingsPlanGoalSchema = z.object({
   id: shortId,
@@ -44,6 +45,8 @@ const savingsPlanGoalSchema = z.object({
   byMonth: z.number().int().min(1).max(MAX_MONTHS).nullable(),
   potId: shortId,
   spend: z.boolean(),
+  /** Part of the pot's money today already set aside for this goal. */
+  saved: amount.default(0),
 }).strict();
 
 export const savingsPlanInputsSchema = z.object({
