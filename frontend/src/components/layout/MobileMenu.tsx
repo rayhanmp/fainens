@@ -8,6 +8,7 @@ import {
   HandCoins,
   Images,
   Landmark,
+  LineChart,
   PiggyBank,
   Settings,
   ShieldAlert,
@@ -35,7 +36,8 @@ const groups = [
   {
     label: 'Plan ahead',
     items: [
-      { to: '/savings-simulator', label: 'Savings', description: 'Test a savings plan', icon: Target },
+      { to: '/goals', label: 'Goals', description: 'Money set aside', icon: Target },
+      { to: '/savings-simulator', label: 'Savings', description: 'Test a savings plan', icon: LineChart },
       { to: '/loans', label: 'Loans', description: 'Track money owed', icon: Users },
       { to: '/paylater', label: 'Pay later', description: 'Upcoming settlements', icon: CreditCard },
       { to: '/reimbursements', label: 'Reimbursements', description: 'Recover shared costs', icon: HandCoins },

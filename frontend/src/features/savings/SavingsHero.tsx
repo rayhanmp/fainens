@@ -142,14 +142,23 @@ export function SavingsHero({ inputs, run, range, outlooks, mode, onMode, ledger
 function LedgerStrip({ pot, several, ledger, onUse }: { pot: PlanPot; several: boolean; ledger: LedgerFacts; onUse: (field: 'start' | 'monthly', value: number) => void }) {
   const { formatAmount } = useBalanceVisibility();
   const saving = ledger.saving;
+  const goals = ledger.goals?.goals.some((goal) => goal.status === 'active') ? ledger.goals : null;
   const items: Array<{ key: string; label: React.ReactNode; value: number | null; field: 'start' | 'monthly'; action: string; extra?: React.ReactNode }> = [
-    {
-      key: 'liquid',
-      label: <Term meaning={`Balances of your ${ledger.liquidAccounts} active cash, bank, e-wallet and investment accounts. Money others owe you isn’t counted.`}>Cash and investments</Term>,
-      value: ledger.liquid,
-      field: 'start',
-      action: 'Use as start',
-    },
+    goals
+      ? {
+          key: 'unassigned',
+          label: <Term meaning={`Your counted cash and investments (${formatAmount(goals.available)}) minus what’s in your goals (${formatAmount(goals.setAside)}). Change it on the Goals page.`}>Free money</Term>,
+          value: Math.max(0, goals.unassigned),
+          field: 'start',
+          action: 'Use as start',
+        }
+      : {
+          key: 'liquid',
+          label: <Term meaning={`Balances of your ${ledger.liquidAccounts} active cash, bank, e-wallet and investment accounts. Money others owe you isn’t counted.`}>Cash and investments</Term>,
+          value: ledger.liquid,
+          field: 'start',
+          action: 'Use as start',
+        },
     {
       key: 'saving',
       label: <Term meaning={saving ? `Income minus spending, averaged over your last ${saving.periods.length} finished salary periods. Each bar is one period; point at it for its figure.` : 'Income minus spending per salary period, once you have finished periods.'}>You save a period</Term>,

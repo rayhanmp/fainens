@@ -11,6 +11,7 @@ import { findPeriodIdForDate } from "../services/transaction-mutations";
 import { invalidateOnTransactionMutation } from "../cache";
 import { bumpFinancialRevisionSync } from "../services/financial-revision";
 import { processStorageDeletionOutbox } from "../services/storage-cleanup";
+import { completeGoalsForWishlist } from "../services/goals";
 
 // SSRF Protection: Allowed domains for web scraping
 const ALLOWED_SCRAPE_DOMAINS = [
@@ -457,6 +458,8 @@ export default async function (fastify: FastifyInstance) {
       affectedPeriodIds: prepared.periodId == null ? undefined : [prepared.periodId],
       revisionBumped: true,
     });
+    // A goal saving for this item is done too, and its money released.
+    await completeGoalsForWishlist(result.wishlist.id, result.transaction.id);
 
     return result;
   });
@@ -513,6 +516,7 @@ export default async function (fastify: FastifyInstance) {
       .returning();
 
     await auditUpdate("wishlist", parseInt(id), item, updated);
+    await completeGoalsForWishlist(item.id, body.transactionId);
 
     return {
       wishlist: updated,

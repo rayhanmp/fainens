@@ -10,9 +10,11 @@ import {
   CheckCircle2, 
   Link as LinkIcon,
   ShoppingBag,
+  Target,
 } from 'lucide-react';
 import { CategoryIcon } from '../features/categories/CategoryIcon';
 import { useDeleteWishlistMutation, useWishlistQuery } from '../features/wishlist/queries';
+import { useGoalsQuery, type Goal } from '../features/goals/queries';
 import { invalidateFinancialSummaries } from '../features/core/query-keys';
 import { Button } from '../components/ui/Button';
 import { ActionSheet } from '../components/ui/ActionSheet';
@@ -78,6 +80,17 @@ export default function WishlistPage() {
   // Phones get an item's menu as a bottom sheet.
   const asSheet = usePhoneSheets();
   const menuItem = items.find((item) => item.id === activeMenuId) ?? null;
+  const goalsQuery = useGoalsQuery();
+  const goalFor = (item: WishlistItem): Goal | undefined => goalsQuery.data?.goals.find((goal) => goal.wishlistId === item.id && goal.status === 'active');
+
+  // A goal for the item, dated by its target period; one that exists already just opens the Goals page.
+  function saveFor(item: WishlistItem) {
+    if (goalFor(item)) {
+      void navigate({ to: '/goals' });
+      return;
+    }
+    void navigate({ to: '/goals', search: { wishlistId: item.id, name: item.name, amount: item.amount, byDate: item.period ? Number(item.period.endDate) : undefined } });
+  }
 
   async function loadData() {
     await invalidateFinancialSummaries(queryClient);
@@ -275,6 +288,16 @@ export default function WishlistPage() {
                           <div className="ui-popover absolute right-0 top-full mt-1 z-20 min-w-[180px] rounded-xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] py-1 shadow-lg">
                             <button
                               onClick={() => {
+                                setActiveMenuId(null);
+                                saveFor(item);
+                              }}
+                              className="cursor-pointer w-full px-4 py-2.5 text-left text-sm font-semibold text-[var(--color-text-primary)] hover:bg-[var(--ref-surface-container-low)] flex items-center gap-2"
+                            >
+                              <Target className="w-4 h-4" />
+                              {goalFor(item) ? 'Open its goal' : 'Save for it'}
+                            </button>
+                            <button
+                              onClick={() => {
                                 setFulfillItem(item);
                                 setActiveMenuId(null);
                               }}
@@ -332,6 +355,7 @@ export default function WishlistPage() {
                     <div className="text-2xl font-bold text-[var(--color-accent)]">
                       {formatAmount(item.amount)}
                     </div>
+                    <WishlistGoalProgress goal={goalFor(item)} formatAmount={formatAmount} onSaveFor={() => saveFor(item)} />
                   </div>
 
                   <div className="flex items-center justify-between pt-4 border-t border-[var(--color-border)] mt-4">
@@ -498,6 +522,7 @@ export default function WishlistPage() {
           onClose={() => setActiveMenuId(null)}
           title={menuItem.name}
           actions={[
+            { key: 'goal', label: goalFor(menuItem) ? 'Open its goal' : 'Save for it', icon: Target, onSelect: () => saveFor(menuItem) },
             { key: 'fulfil', label: 'Mark as fulfilled', icon: CheckCircle2, onSelect: () => setFulfillItem(menuItem) },
             { key: 'link', label: 'Link to transaction', icon: LinkIcon, onSelect: () => setLinkItem(menuItem) },
             { key: 'delete', label: 'Delete', icon: Trash2, tone: 'danger', onSelect: () => setDeleteConfirmItem(menuItem) },
@@ -505,5 +530,28 @@ export default function WishlistPage() {
         />
       )}
     </PageContainer>
+  );
+}
+
+/** How far the item's goal has got, or a way to start saving for it. */
+function WishlistGoalProgress({ goal, formatAmount, onSaveFor }: { goal: Goal | undefined; formatAmount: (amount: number) => string; onSaveFor: () => void }) {
+  if (!goal) {
+    return (
+      <button type="button" onClick={onSaveFor} className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--ref-primary)] hover:underline">
+        <Target className="h-3.5 w-3.5" aria-hidden />Save for it
+      </button>
+    );
+  }
+  const progress = goal.targetAmount > 0 ? Math.min(1, goal.setAside / goal.targetAmount) : 0;
+  return (
+    <button type="button" onClick={onSaveFor} className="mt-3 block w-full text-left" title="Open on the Goals page">
+      <span className="block h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]">
+        <span className="block h-full rounded-full" style={{ width: `${progress * 100}%`, background: progress >= 1 ? 'var(--color-success)' : 'var(--color-accent)' }} />
+      </span>
+      <span className="mt-1.5 flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)]">
+        <Target className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        <span className="tabular-nums">{progress >= 1 ? 'Saved up: ' : 'Saved '}<strong className="font-semibold text-[var(--color-text-primary)]">{formatAmount(goal.setAside)}</strong> of {formatAmount(goal.targetAmount)}</span>
+      </span>
+    </button>
   );
 }

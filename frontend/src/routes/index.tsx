@@ -31,6 +31,7 @@ import { useBalanceVisibility } from '../hooks/useBalanceVisibility';
 import { useNetWorthTrendQuery } from '../features/analytics/queries';
 import { useAgentProfileQuery, useFinancialFactsQuery } from '../features/agent/queries';
 import { usePendingTransactionsQuery } from '../features/transactions/queries';
+import { useGoalsQuery } from '../features/goals/queries';
 import { useUiStore } from '../stores/ui-store';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
 import { DashboardSections } from '../features/dashboard/DashboardSections';
@@ -266,6 +267,7 @@ function DashboardPage() {
   const previousPeriod = periods.find((period) => String(period.id) === previousPeriodId) ?? null;
   const previousFactsQuery = useFinancialFactsQuery({ periodId: previousPeriod?.id }, showsPulse('spendVsLast') && previousPeriod != null);
   const reimbursementsQuery = useQuery({ queryKey: queryKeys.reimbursements.list(), queryFn: () => api.reimbursements.list(), enabled: showsPulse('reimbursementsDue') });
+  const goalsQuery = useGoalsQuery(showsPulse('unassigned') || showsPulse('setAside'));
   const previousFacts = previousFactsQuery.data?.data.facts;
   const previousPeriodInput: PulseInputs['previousPeriod'] = !previousPeriod ? 'none' : !previousFacts || !pacing ? null
     : pacing.status === 'ended'
@@ -296,6 +298,7 @@ function DashboardPage() {
     reimbursements: reimbursementsQuery.data ? { total: openClaims.reduce((sum, claim) => sum + claim.outstandingAmount, 0), count: openClaims.length } : null,
     subscriptions: subscriptions ? monthlySubscriptionCost(subscriptions.subscriptions) : null,
     pendingCount: pendingTransactionsQuery.data ? pendingTransactionCount : null,
+    goals: goalsQuery.data ? { ...goalsQuery.data, activeCount: goalsQuery.data.goals.filter((goal) => goal.status === 'active').length } : null,
   };
 
   const closeShortcuts = useCallback(() => setIsShortcutsOpen(false), []);

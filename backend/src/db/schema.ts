@@ -203,6 +203,50 @@ export const savingsPlans = sqliteTable("savings_plan", {
     .default(sql`(unixepoch('now') * 1000)`),
 });
 
+/**
+ * Something money is set aside for: its own pot inside the app. `kind` spend: bought when reached (the money leaves);
+ * keep: an amount to hold, like an emergency fund. What's set aside is the sum of its allocations.
+ * status: active | done (bought or finished) | archived.
+ */
+export const savingsGoals = sqliteTable("savings_goal", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  targetAmount: integer("target_amount").notNull(),
+  byDate: integer("by_date", { mode: "timestamp_ms" }),
+  kind: text("kind").notNull().default("spend"),
+  /** What you plan to set aside for it each period. */
+  monthlyAmount: integer("monthly_amount").notNull().default(0),
+  status: text("status").notNull().default("active"),
+  wishlistId: integer("wishlist_id").references(() => wishlist.id, { onDelete: "set null" }),
+  spentTransactionId: integer("spent_transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  doneAt: integer("done_at", { mode: "timestamp_ms" }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+});
+
+/**
+ * Money moved onto (positive) or off (negative) a goal. kind: assign | release | spend (the goal
+ * was bought, optionally with the transaction that paid it).
+ */
+export const goalAllocations = sqliteTable("goal_allocation", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(),
+  kind: text("kind").notNull().default("assign"),
+  note: text("note"),
+  transactionId: integer("transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  goalIdx: index("idx_goal_allocation_goal").on(table.goalId),
+}));
+
+/** One row: which liquid accounts don't count as money you can set aside (JSON ids). */
+export const goalSettings = sqliteTable("goal_settings", {
+  id: integer("id").primaryKey(),
+  excludedAccountIds: text("excluded_account_ids").notNull().default("[]"),
+});
+
 export const tags = sqliteTable("tag", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),

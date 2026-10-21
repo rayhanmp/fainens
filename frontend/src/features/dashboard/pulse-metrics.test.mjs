@@ -90,3 +90,12 @@ test('loading values never render as zero', () => {
   const loading = { ...base, burnRate: null, netWorth: null, runway: null, isAnalyticsLoading: true, isPeriodLoading: true, upcoming: null };
   for (const id of ['burn', 'netWorth', 'runway', 'cashFlow', 'upcoming']) assert.equal(pulseMetricValue(id, loading, format).value, 'Loading…');
 });
+
+test('goal metrics show what is set aside and what is still free', () => {
+  const goals = { available: 45_000, setAside: 24_000, unassigned: 21_000, activeCount: 2 };
+  assert.deepEqual([pulseMetricValue('unassigned', { ...base, goals }, format).value, pulseMetricValue('unassigned', { ...base, goals }, format).detail], ['Rp21000', 'of Rp45000']);
+  assert.equal(pulseMetricValue('setAside', { ...base, goals }, format).detail, '2 goals');
+  assert.equal(pulseMetricValue('setAside', { ...base, goals: { ...goals, activeCount: 0 } }, format).value, 'No goals');
+  assert.equal(pulseMetricValue('unassigned', { ...base, goals: { ...goals, unassigned: -5 } }, format).tone, 'negative');
+  assert.equal(pulseMetricValue('unassigned', { ...base, goals: null }, format).value, 'Loading…');
+});

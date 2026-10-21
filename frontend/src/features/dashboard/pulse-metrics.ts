@@ -7,6 +7,7 @@ export const pulseMetricIds = [
   'budgetUsed', 'topCategory', 'upcoming', 'netWorth',
   'debt', 'transactions', 'daysLeft',
   'spendVsLast', 'netWorthChange', 'owedToYou', 'reimbursementsDue', 'subscriptionsMonthly', 'pendingReview',
+  'unassigned', 'setAside',
 ] as const;
 export type PulseMetricId = typeof pulseMetricIds[number];
 
@@ -19,6 +20,7 @@ export const pulseMetricGroups: { label: string; ids: PulseMetricId[] }[] = [
   { label: 'This period', ids: ['cashFlow', 'savingsRate', 'income', 'spending', 'spendVsLast', 'dailySpend', 'transactions', 'topCategory'] },
   { label: 'Budget', ids: ['budgetUsed', 'safePace', 'daysLeft'] },
   { label: 'Wealth', ids: ['netWorth', 'netWorthChange', 'debt', 'owedToYou', 'burn', 'runway'] },
+  { label: 'Goals', ids: ['unassigned', 'setAside'] },
   { label: 'Bills & follow-ups', ids: ['upcoming', 'subscriptionsMonthly', 'reimbursementsDue', 'pendingReview'] },
 ];
 
@@ -44,6 +46,8 @@ export const pulseMetricLabels: Record<PulseMetricId, string> = {
   reimbursementsDue: 'Reimbursements due',
   subscriptionsMonthly: 'Subscriptions / month',
   pendingReview: 'Pending review',
+  unassigned: 'Free money',
+  setAside: 'In goals',
 };
 
 /** Shorter names for the narrow tiles on a phone; metrics not listed keep their full label. */
@@ -55,6 +59,8 @@ export const pulseMetricShortLabels: Partial<Record<PulseMetricId, string>> = {
   spendVsLast: 'Vs last period',
   netWorthChange: 'Net worth Δ',
   reimbursementsDue: 'Reimbursements',
+  unassigned: 'Free money',
+  setAside: 'In goals',
   subscriptionsMonthly: 'Subs / month',
 };
 
@@ -136,6 +142,8 @@ export type PulseInputs = {
   subscriptions?: { monthlyCents: number; count: number } | null;
   /** Imported items waiting for review; null while loading. */
   pendingCount?: number | null;
+  /** Cash and investments split into what's in goals and what's free; null while loading. */
+  goals?: { available: number; setAside: number; unassigned: number; activeCount: number } | null;
 };
 
 /** Sums a period's spending through `dayIndex` days after its start, matching the current period's elapsed days. */
@@ -275,6 +283,20 @@ export function pulseMetricValue(id: PulseMetricId, input: PulseInputs, format: 
       const count = input.pendingCount;
       if (count == null) return { value: 'Loading…', hint: 'Imported transactions waiting for you to review before posting.' };
       return { value: count > 0 ? String(count) : 'All clear', detail: count > 0 ? `item${count === 1 ? '' : 's'} to review` : undefined, tone: count > 0 ? 'negative' : undefined, hint: 'Imported transactions waiting for you to review before posting.' };
+    }
+    case 'unassigned': {
+      const goals = input.goals;
+      const hint = 'Cash and investments not in any goal. Put money into goals on the Goals page.';
+      if (!goals) return { value: 'Loading…', hint };
+      // Below zero means goals have more than the counted accounts now hold.
+      return { value: amount(goals.unassigned), detail: `of ${amount(goals.available)}`, tone: goals.unassigned < 0 ? 'negative' : undefined, hint };
+    }
+    case 'setAside': {
+      const goals = input.goals;
+      const hint = 'Money in your active goals on the Goals page.';
+      if (!goals) return { value: 'Loading…', hint };
+      if (goals.activeCount === 0) return { value: 'No goals', hint };
+      return { value: amount(goals.setAside), detail: `${goals.activeCount} goal${goals.activeCount === 1 ? '' : 's'}`, hint };
     }
   }
 }

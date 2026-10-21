@@ -1,4 +1,5 @@
 import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
 import { Button } from '../../components/ui/Button';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn } from '../../lib/utils';
@@ -103,6 +104,7 @@ export function GoalsPanel({ outlooks, inputs, selectedId, onSelect, onAdd, onEd
         <div className="flex items-center gap-2">
           <InfoHint label="How goals work" align="right">
             A goal’s cost is in today’s prices; the plan adds inflation. Each goal is paid from one pot, in order: dated goals by date, then the rest. <strong>Spent</strong> goals leave the pot when bought; <strong>kept</strong> ones stay in it, held back from later goals. Tap a goal to mark it on the chart.
+            {' '}A new plan starts from the goals and the money in them on your <Link to="/goals" className="font-semibold underline">Goals page</Link>; changes here are a what-if and don’t touch them.
           </InfoHint>
           <Button type="button" size="sm" variant="secondary" className="h-[34px]" onClick={onAdd}>
             <Plus className="mr-1 inline h-3.5 w-3.5" aria-hidden />Add goal

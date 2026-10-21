@@ -21,6 +21,7 @@ import categoryRoutes from "./routes/categories";
 import tagRoutes from "./routes/tags";
 import transportRouteTemplateRoutes from "./routes/transport-route-templates";
 import savingsPlanRoutes from "./routes/savings-plans";
+import goalRoutes from "./routes/goals";
 import periodRoutes from "./routes/periods";
 import budgetRoutes from "./routes/budget";
 import attachmentRoutes from "./routes/attachments";
@@ -60,7 +61,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(swagger, {
     openapi: {
       info: { title: "Fainens API", version: "1.0.0", description: "Personal finance ledger API" },
-      tags: ["accounts", "transactions", "categories", "periods", "budgets", "analytics", "agent", "profile", "gallery", "reimbursements", "savings"].map((name) => ({ name })),
+      tags: ["accounts", "transactions", "categories", "periods", "budgets", "analytics", "agent", "profile", "gallery", "reimbursements", "savings", "goals"].map((name) => ({ name })),
     },
     transform: jsonSchemaTransform,
   });
@@ -122,6 +123,7 @@ export async function buildApp({ runtime = "server" }: { runtime?: AppRuntime } 
   app.register(tagRoutes);
   app.register(transportRouteTemplateRoutes);
   app.register(savingsPlanRoutes);
+  app.register(goalRoutes);
   app.register(periodRoutes);
   app.register(budgetRoutes);
   app.register(attachmentRoutes);

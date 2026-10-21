@@ -79,6 +79,7 @@ export const CHANGELOG: ChangelogMonth[] = [
   {
     month: 'October 2026',
     highlights: [
+      { title: 'Goals for your money', body: 'Split your cash and investments into goals, each its own pot, and see what’s still free. Put in every goal’s monthly amount in one tap from Goals or Budget, save for a wishlist item, and finish a goal with the purchase that paid for it.' },
       { title: 'A new savings simulator', body: 'Start a plan from your ledger, split it into pots like Tabungan, SBN and Saham, and give each goal its own pot so no two goals count the same money. Save plans to compare on any device, and plan retirement in today’s prices with BPJS, health cover and sourced guidance.' },
       { title: 'Subscriptions, rebuilt', body: 'See what they cost a month and a year, this year’s running total, a renewal calendar, which accounts can cover what’s due, and a month-by-month record of every charge, skip and pause.' },
       { title: 'Renewals the way they really happen', body: 'Custom intervals, free trials, cancel dates and dollar prices; record a payment late or early with its real amount, choose whether the schedule moves, or link a charge you already entered.' },

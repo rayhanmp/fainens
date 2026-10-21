@@ -1,4 +1,4 @@
-import { LayoutDashboard, Receipt, Wallet, Sparkles, PiggyBank, Banknote, Users, CreditCard, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Receipt, Wallet, Sparkles, PiggyBank, Banknote, Users, CreditCard, BarChart3, Target } from 'lucide-react';
 
 export const navigationGroups = [
   { label: '', items: [
@@ -9,6 +9,7 @@ export const navigationGroups = [
   ] },
   { label: 'Planning', items: [
     { to: '/budget', label: 'Budget', icon: PiggyBank },
+    { to: '/goals', label: 'Goals', icon: Target },
     { to: '/salary-income', label: 'Income & salary', icon: Banknote },
   ] },
   { label: 'Debt', items: [

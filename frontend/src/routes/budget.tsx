@@ -13,6 +13,7 @@ import { toast, errorMessage } from '../components/ui/useToast';
 import { RequireAuth } from '../lib/auth';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { findCurrentPeriod, formatCurrency, formatDate, formatDayMonth, cn, parseIdNominalToInt, formatIdNominalInput } from '../lib/utils';
+import { BudgetGoalsCard } from '../features/goals/BudgetGoalsCard';
 import { api } from '../lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -1400,6 +1401,11 @@ function BudgetPage() {
                   ))}
                 </div>
               </div>
+
+              <BudgetGoalsCard
+                savingsTarget={isPeriodTracked && savingsTargetAmount > 0 ? savingsTargetAmount : null}
+                canFund={!isPeriodClosed && pacing?.status === 'active'}
+              />
 
               {/* Budget mix */}
               <div className="rounded-3xl border border-[var(--color-border)] bg-[var(--ref-surface-container-lowest)] p-6 editorial-shadow">

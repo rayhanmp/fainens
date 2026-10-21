@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEv
 import {
   ArrowDownLeft, ArrowUpRight, BellRing, CalendarClock, CalendarDays, Check, ChevronDown, CircleDollarSign, Clock, CreditCard,
   Flame, Gauge, HandCoins, Hourglass, Landmark, Percent, PieChart, Plus, ReceiptText, Repeat, RotateCcw,
-  Scale, Settings2, Tag, TrendingUp, Users, X, type LucideIcon,
+  PiggyBank, Scale, Settings2, Tag, Target, TrendingUp, Users, X, type LucideIcon,
 } from 'lucide-react';
 import { cn, formatDecimal } from '../../lib/utils';
 import { tooltipSurface } from './panel-styles';
@@ -20,7 +20,7 @@ const metricIcons: Record<PulseMetricId, LucideIcon> = {
   budgetUsed: PieChart, topCategory: Tag, upcoming: BellRing, netWorth: Landmark,
   debt: CreditCard, transactions: ReceiptText, daysLeft: Hourglass,
   spendVsLast: Scale, netWorthChange: TrendingUp, owedToYou: Users, reimbursementsDue: HandCoins,
-  subscriptionsMonthly: Repeat, pendingReview: Clock,
+  subscriptionsMonthly: Repeat, pendingReview: Clock, unassigned: PiggyBank, setAside: Target,
 };
 
 /**

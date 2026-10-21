@@ -5,6 +5,7 @@ import { toast } from '../../components/ui/useToast';
 import { Section } from '../subscriptions/PageParts';
 import { EventDialog, GoalDialog, NameDialog } from './dialogs';
 import { GoalsPanel, type GoalSuggestion } from './GoalsPanel';
+import { planFromGoals } from './from-goals';
 import { DEFAULT_PLAN, DEFAULT_POT, goalOutlooks, MAX_POTS, newId, normalizePlan, planRange, runPlan, samePlan, withOwnPot, type PlanEvent, type PlanGoal, type PlanInputs, type PlanPot } from './plan';
 import { OWN_POT, type PotTemplate } from './pots';
 import { PlanPanel } from './PlanPanel';
@@ -42,14 +43,19 @@ function readStored(): Stored {
   }
 }
 
-/** A first plan from the ledger: one pot holding what you have now, fed by what you've been saving. */
+/**
+ * A first plan from the ledger: your real goals and pots when you have any, otherwise one pot
+ * holding what you have now, fed by what you've been saving.
+ */
 function planFromLedger(ledger: LedgerFacts): PlanInputs {
+  const average = ledger.saving && ledger.saving.average > 0 ? ledger.saving.average : 0;
+  if (ledger.goals?.goals.some((goal) => goal.status === 'active')) return planFromGoals(ledger.goals, average);
   return {
     ...DEFAULT_PLAN,
     pots: [{
       ...DEFAULT_POT,
       start: Math.max(0, Math.round(ledger.liquid ?? 0)),
-      monthly: ledger.saving && ledger.saving.average > 0 ? Math.round(ledger.saving.average / 10_000) * 10_000 : 0,
+      monthly: Math.round(average / 10_000) * 10_000,
     }],
   };
 }

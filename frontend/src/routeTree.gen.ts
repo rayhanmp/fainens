@@ -25,6 +25,7 @@ import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LoansRouteImport } from './routes/loans'
 import { Route as HelpRouteImport } from './routes/help'
+import { Route as GoalsRouteImport } from './routes/goals'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as CategoriesRouteImport } from './routes/categories'
 import { Route as BudgetRouteImport } from './routes/budget'
@@ -117,6 +118,11 @@ const HelpRoute = HelpRouteImport.update({
   path: '/help',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GoalsRoute = GoalsRouteImport.update({
+  id: '/goals',
+  path: '/goals',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GalleryRoute = GalleryRouteImport.update({
   id: '/gallery',
   path: '/gallery',
@@ -183,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
   '/gallery': typeof GalleryRoute
+  '/goals': typeof GoalsRoute
   '/help': typeof HelpRouteWithChildren
   '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
@@ -212,6 +219,7 @@ export interface FileRoutesByTo {
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
   '/gallery': typeof GalleryRoute
+  '/goals': typeof GoalsRoute
   '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
@@ -241,6 +249,7 @@ export interface FileRoutesById {
   '/budget': typeof BudgetRoute
   '/categories': typeof CategoriesRoute
   '/gallery': typeof GalleryRoute
+  '/goals': typeof GoalsRoute
   '/help': typeof HelpRouteWithChildren
   '/loans': typeof LoansRoute
   '/login': typeof LoginRoute
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
     | '/budget'
     | '/categories'
     | '/gallery'
+    | '/goals'
     | '/help'
     | '/loans'
     | '/login'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/budget'
     | '/categories'
     | '/gallery'
+    | '/goals'
     | '/loans'
     | '/login'
     | '/onboarding'
@@ -329,6 +340,7 @@ export interface FileRouteTypes {
     | '/budget'
     | '/categories'
     | '/gallery'
+    | '/goals'
     | '/help'
     | '/loans'
     | '/login'
@@ -359,6 +371,7 @@ export interface RootRouteChildren {
   BudgetRoute: typeof BudgetRoute
   CategoriesRoute: typeof CategoriesRoute
   GalleryRoute: typeof GalleryRoute
+  GoalsRoute: typeof GoalsRoute
   HelpRoute: typeof HelpRouteWithChildren
   LoansRoute: typeof LoansRoute
   LoginRoute: typeof LoginRoute
@@ -491,6 +504,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HelpRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/goals': {
+      id: '/goals'
+      path: '/goals'
+      fullPath: '/goals'
+      preLoaderRoute: typeof GoalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/gallery': {
       id: '/gallery'
       path: '/gallery'
@@ -593,6 +613,7 @@ const rootRouteChildren: RootRouteChildren = {
   BudgetRoute: BudgetRoute,
   CategoriesRoute: CategoriesRoute,
   GalleryRoute: GalleryRoute,
+  GoalsRoute: GoalsRoute,
   HelpRoute: HelpRouteWithChildren,
   LoansRoute: LoansRoute,
   LoginRoute: LoginRoute,

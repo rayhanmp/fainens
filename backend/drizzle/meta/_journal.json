@@ -358,6 +358,13 @@
       "when": 1788098000000,
       "tag": "0050_savings_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1788099000000,
+      "tag": "0051_goals",
+      "breakpoints": true
     }
   ]
 }

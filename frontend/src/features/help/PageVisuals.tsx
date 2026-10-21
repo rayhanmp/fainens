@@ -2,6 +2,8 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { ArrowRight, BookOpen, Database, Search, Sparkles, UserRound } from 'lucide-react';
 import { Toggle } from '../settings/controls';
 import { cn } from '../../lib/utils';
+import { GoalsHero } from '../goals/GoalsHero';
+import type { GoalsOverview } from '../goals/queries';
 import { Segmented } from '../savings/fields';
 import { DEFAULT_PLAN, goalOutlooks, planRange, runPlan, type PlanInputs } from '../savings/plan';
 import { ProjectionChart, type ValueMode } from '../savings/ProjectionChart';
@@ -31,6 +33,35 @@ const SAMPLE_PLAN: PlanInputs = {
   events: [{ id: 'sample-wedding', label: 'Wedding', month: 30, amount: -20_000_000, yearly: false, potId: 'sample-cash' }],
   goals: [{ id: 'sample-house', name: 'House down payment', amount: 100_000_000, byMonth: 84, potId: 'sample-sbn', spend: false, saved: 0 }],
 };
+
+const sampleGoal = { byDate: null, kind: 'keep' as const, status: 'active' as const, wishlistId: null, spentTransactionId: null, doneAt: null, setAsideThisMonth: 0 };
+
+/** Rp45 juta in three accounts, Rp29 juta of it in an emergency fund and a laptop. */
+const SAMPLE_GOALS: GoalsOverview = {
+  available: 45_000_000,
+  setAside: 29_000_000,
+  unassigned: 16_000_000,
+  accounts: [
+    { id: 1, name: 'BCA', liquidityClass: 'cash_equivalent', balance: 18_000_000, included: true },
+    { id: 2, name: 'Jago', liquidityClass: 'cash_equivalent', balance: 12_000_000, included: true },
+    { id: 3, name: 'Bibit', liquidityClass: 'investment', balance: 15_000_000, included: true },
+  ],
+  goals: [
+    { ...sampleGoal, id: 1, name: 'Emergency fund', targetAmount: 30_000_000, monthlyAmount: 1_000_000, sortOrder: 0, setAside: 24_000_000 },
+    { ...sampleGoal, id: 2, name: 'Laptop', targetAmount: 18_000_000, kind: 'spend', byDate: new Date(2027, 5, 30).getTime(), monthlyAmount: 1_500_000, sortOrder: 1, setAside: 5_000_000 },
+    { ...sampleGoal, id: 3, name: 'Japan trip', targetAmount: 25_000_000, kind: 'spend', monthlyAmount: 0, sortOrder: 2, setAside: 0 },
+  ],
+};
+
+/** The Goals page’s own top card, drawn from sample goals; pick a goal in the bar to select it. */
+export function GoalsShelfDemo() {
+  const [selectedId, setSelectedId] = useState<number | null>(1);
+  return (
+    <VisualFrame caption="Try it: pick a goal in the bar (sample: Rp45 juta in three accounts, Rp29 juta in two goals, Rp16 juta still free).">
+      <GoalsHero overview={SAMPLE_GOALS} selectedId={selectedId} onSelect={setSelectedId} onAdd={() => {}} onFundMonthly={() => {}} funding={false} monthlyTotal={2_500_000} />
+    </VisualFrame>
+  );
+}
 
 /** The simulator’s How it grows card itself, the real chart and switch, drawn from a sample plan. */
 export function SavingsFanDemo() {
