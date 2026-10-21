@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, GripVertical, Sparkles, Trash2 } from 'lucide-react';
+import { ChevronDown, GripVertical, Sparkles, Trash2, X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { toast } from '../../../components/ui/useToast';
 import { cn } from '../../../lib/utils';
@@ -31,12 +31,11 @@ const laneLabel = (lane: Lane) => (lane === 'none' ? 'Not in a bag yet' : BAG_LA
 const laneOf = (item: PackingItem): Lane => item.bag ?? 'none';
 const byOrder = (a: PackingItem, b: PackingItem) => a.sortOrder - b.sortOrder || a.id - b.id;
 
-/** One thing to pack: tick it, open it to change what it is, how many, its kind, bag and owner. */
-function ItemRow({ item, trip, showOwner, showBag, draggable, dragging, dropBefore, onDragStart, onDragEnd, onDragOver }: {
+/** One thing to pack: tick it, open it to change what it is, how many, its kind, bag and (with a group) whose it is. */
+function ItemRow({ item, trip, showOwner, draggable, dragging, dropBefore, onDragStart, onDragEnd, onDragOver }: {
   item: PackingItem;
   trip: Trip;
   showOwner: boolean;
-  showBag: boolean;
   draggable: boolean;
   dragging: boolean;
   dropBefore: boolean;
@@ -59,10 +58,10 @@ function ItemRow({ item, trip, showOwner, showBag, draggable, dragging, dropBefo
           <input aria-label="What" autoFocus className="brutalist-input h-[34px] min-w-0 flex-1" value={text} maxLength={120} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setEditing(false); }} />
           <input aria-label="How many" inputMode="numeric" className="brutalist-input h-[34px] w-[64px] text-center tabular-nums" value={quantity} onChange={(event) => setQuantity(event.target.value.replace(/\D/g, '').slice(0, 2))} />
         </div>
-        <div className="grid grid-cols-1 gap-2 @md:grid-cols-3">
+        <div className={cn('grid grid-cols-1 gap-2', trip.travellers.length > 1 ? '@md:grid-cols-3' : '@md:grid-cols-2')}>
           <Dropdown ariaLabel="Kind" value={item.category} options={PACKING_CATEGORIES.map((category) => ({ value: category, label: CATEGORY_LABELS[category] }))} onChange={(category) => save({ id: item.id, category })} />
           <Dropdown ariaLabel="Bag" value={item.bag ?? 'none'} options={LANES.map((lane) => ({ value: lane, label: laneLabel(lane) }))} onChange={(lane) => save({ id: item.id, bag: lane === 'none' ? null : lane })} />
-          <Dropdown ariaLabel="Whose" value={String(item.travellerId ?? 'shared')} options={[{ value: 'shared', label: 'Everyone’s' }, ...trip.travellers.map((traveller) => ({ value: String(traveller.id), label: traveller.name }))]} onChange={(value) => save({ id: item.id, travellerId: value === 'shared' ? null : Number(value) })} />
+          {trip.travellers.length > 1 && <Dropdown ariaLabel="Whose" value={String(item.travellerId ?? 'shared')} options={[{ value: 'shared', label: 'Everyone’s' }, ...trip.travellers.map((traveller) => ({ value: String(traveller.id), label: traveller.name }))]} onChange={(value) => save({ id: item.id, travellerId: value === 'shared' ? null : Number(value) })} />}
         </div>
         <div className="flex items-center justify-between">
           <button type="button" aria-label={`Remove ${item.text}`} onClick={() => remove.mutate(item.id, { onError: (error) => toast.error(errorText(error, 'Could not remove it')) })} className="grid h-[30px] w-[30px] place-items-center rounded-lg text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)]"><Trash2 className="h-3.5 w-3.5" aria-hidden /></button>
@@ -83,7 +82,7 @@ function ItemRow({ item, trip, showOwner, showBag, draggable, dragging, dropBefo
       onDragOver={(event) => { if (!onDragOver) return; event.preventDefault(); event.stopPropagation(); onDragOver(); }}
       className={cn('group relative flex items-center gap-2 rounded-lg py-1.5 pr-1', draggable && 'bg-[var(--color-surface)]', dragging && 'opacity-40', dropBefore && 'before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:rounded-full before:bg-[var(--ref-primary)]')}
     >
-      {draggable && <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-[var(--ref-outline)] opacity-60 group-hover:opacity-100" aria-hidden />}
+      {draggable && <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-[var(--ref-outline)] opacity-0 group-hover:opacity-100" aria-hidden />}
       <input type="checkbox" className="h-4 w-4 shrink-0 accent-[var(--ref-primary)]" checked={item.done} aria-label={item.text} onChange={(event) => save({ id: item.id, done: event.target.checked })} />
       <button type="button" onClick={() => { setText(item.text); setQuantity(String(item.quantity)); setEditing(true); }} className="min-w-0 flex-1 text-left">
         <span className={cn('text-sm', item.done ? 'text-[var(--ref-on-surface-variant)] line-through' : 'text-[var(--ref-on-surface)]')}>
@@ -91,8 +90,16 @@ function ItemRow({ item, trip, showOwner, showBag, draggable, dragging, dropBefo
           {item.quantity > 1 && <span className="ml-1.5 text-xs font-semibold tabular-nums text-[var(--ref-on-surface-variant)]">×{item.quantity}</span>}
         </span>
       </button>
-      {showBag && <span className="shrink-0 text-[11px] text-[var(--ref-on-surface-variant)]">{item.bag ? BAG_LABELS[item.bag] : ''}</span>}
-      {showOwner && <span className="shrink-0 rounded-full bg-[var(--ref-surface-container-high)] px-2 py-px text-[11px] font-medium text-[var(--ref-on-surface-variant)]">{owner ? owner.name : 'Everyone'}</span>}
+      {showOwner && owner && <span className="shrink-0 text-[11px] text-[var(--ref-on-surface-variant)]">{owner.name}</span>}
+      <button
+        type="button"
+        aria-label={`Remove ${item.text}`}
+        disabled={remove.isPending}
+        onClick={() => remove.mutate(item.id, { onError: (error) => toast.error(errorText(error, 'Could not remove it')) })}
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-[var(--ref-on-surface-variant)] opacity-0 transition-opacity hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--color-danger)] focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+      >
+        <X className="h-3.5 w-3.5" aria-hidden />
+      </button>
     </li>
   );
 }
@@ -155,7 +162,7 @@ function QuickAdd({ goalId, trip, who }: { goalId: number; trip: Trip; who: Who 
         <input aria-label="Add something to pack" className="brutalist-input h-[34px] w-full pr-28" placeholder="Add something, like “socks x7”" value={text} maxLength={120} onChange={(event) => setText(event.target.value)} />
         {text.trim() && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-[var(--ref-surface-container-high)] px-2 py-px text-[11px] text-[var(--ref-on-surface-variant)]">{CATEGORY_LABELS[category]}</span>}
       </div>
-      {trip.travellers.length > 0 && (
+      {trip.travellers.length > 1 && (
         <div className="w-[150px]"><Dropdown ariaLabel="Whose" value={owner} options={[{ value: 'shared', label: 'Everyone’s' }, ...trip.travellers.map((traveller) => ({ value: String(traveller.id), label: traveller.name }))]} onChange={setOwner} /></div>
       )}
       <Button type="submit" size="sm" variant="secondary" isLoading={add.isPending} disabled={!text.trim()}>Add</Button>
@@ -164,22 +171,25 @@ function QuickAdd({ goalId, trip, who }: { goalId: number; trip: Trip; who: Who 
 }
 
 /**
- * What to pack, two ways: by bag (carry-on, checked, a personal item, not decided yet), dragging
- * things between them, or by kind (clothes, toiletries, documents…). Show everyone's or one
- * person's; tick things off as they go in. A starter list fits the weather, the days and what
- * you'll do.
+ * What to pack: a plain checklist by kind (clothes, toiletries, documents…), or by bag (carry-on,
+ * checked, a personal item, not decided yet) to drag things between them. A group can show one
+ * person's things; packed things can be hidden. A starter list fits the weather, the days and
+ * what you'll do.
  */
 export function PackingPanel({ goalId, trip }: { goalId: number; trip: Trip }) {
   const move = useMovePackingMutation(goalId);
-  const [view, setView] = useState<'bag' | 'kind'>('bag');
+  const [view, setView] = useState<'kind' | 'bag'>('kind');
   const [who, setWho] = useState<Who>('all');
+  const [hidePacked, setHidePacked] = useState(false);
   const [starting, setStarting] = useState(false);
   const [folded, setFolded] = useState<Set<PackingCategory>>(new Set());
   const [dragged, setDragged] = useState<number | null>(null);
   const [over, setOver] = useState<{ lane: Lane; before: number | null } | null>(null);
-  const items = useMemo(() => trip.packing.filter((item) => who === 'all' || (who === 'shared' ? item.travellerId === null : item.travellerId === who)).sort(byOrder), [trip.packing, who]);
+  const group = trip.travellers.length > 1;
+  const items = useMemo(() => trip.packing.filter((item) => !group || who === 'all' || (who === 'shared' ? item.travellerId === null : item.travellerId === who)).sort(byOrder), [trip.packing, who, group]);
   const packed = items.filter((item) => item.done).length;
-  const showOwner = who === 'all' && trip.travellers.length > 0;
+  const showOwner = group && who === 'all';
+  const listed = hidePacked ? items.filter((item) => !item.done) : items;
 
   const drop = (lane: Lane) => {
     if (dragged === null || !over) return;
@@ -195,7 +205,6 @@ export function PackingPanel({ goalId, trip }: { goalId: number; trip: Trip }) {
     item,
     trip,
     showOwner,
-    showBag: !lane,
     draggable: Boolean(lane),
     dragging: dragged === item.id,
     dropBefore: Boolean(lane) && dragged !== null && dragged !== item.id && over?.before === item.id,
@@ -207,25 +216,32 @@ export function PackingPanel({ goalId, trip }: { goalId: number; trip: Trip }) {
   return (
     <Section
       title="Packing"
-      aside={trip.packing.length > 0 ? <Segmented ariaLabel="Show by" value={view} onChange={setView} options={[{ value: 'bag', label: 'By bag' }, { value: 'kind', label: 'By kind' }]} /> : undefined}
+      aside={trip.packing.length > 0 ? <Segmented ariaLabel="Show" value={view} onChange={setView} options={[{ value: 'kind', label: 'Checklist' }, { value: 'bag', label: 'By bag' }]} /> : undefined}
     >
       <div className="@container space-y-4 px-4 py-4 sm:px-5">
         {trip.packing.length === 0 ? (
           <Starter goalId={goalId} trip={trip} />
         ) : (
           <>
-            {/* Whose things, and how many are in. */}
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* How many are in, and (for a group) whose things. */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="font-semibold tabular-nums text-[var(--ref-on-surface)]">{packed === items.length && items.length ? 'All packed' : `${packed} of ${items.length} packed`}</span>
+                {view === 'kind' && packed > 0 && (
+                  <button type="button" aria-pressed={hidePacked} onClick={() => setHidePacked((current) => !current)} className="font-semibold text-[var(--ref-primary)] hover:underline">{hidePacked ? 'Show packed' : 'Hide packed'}</button>
+                )}
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]" aria-hidden>
+                <div className="h-full rounded-full bg-[var(--ref-primary)] transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${items.length ? (packed / items.length) * 100 : 0}%` }} />
+              </div>
+            </div>
+            {group && (
               <div className="flex flex-wrap gap-1.5" role="group" aria-label="Whose things">
-                {([['all', 'Everyone'], ...trip.travellers.map((traveller) => [traveller.id, traveller.name]), ...(trip.travellers.length ? [['shared', 'Shared']] : [])] as Array<[Who, string]>).map(([value, label]) => (
+                {([['all', 'Everyone'], ...trip.travellers.map((traveller) => [traveller.id, traveller.name]), ['shared', 'Shared']] as Array<[Who, string]>).map(([value, label]) => (
                   <button key={String(value)} type="button" aria-pressed={who === value} onClick={() => setWho(value)} className={cn('rounded-full px-3 py-1 text-xs font-semibold transition-colors', who === value ? 'bg-[var(--ref-primary)] text-[var(--color-surface)]' : 'bg-[var(--ref-surface-container-low)] text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)]')}>{label}</button>
                 ))}
               </div>
-              <span className="text-xs font-semibold tabular-nums text-[var(--ref-on-surface-variant)]">{packed} of {items.length} packed</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]" aria-hidden>
-              <div className="h-full rounded-full bg-[var(--ref-primary)] transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${items.length ? (packed / items.length) * 100 : 0}%` }} />
-            </div>
+            )}
 
             <QuickAdd key={String(who)} goalId={goalId} trip={trip} who={who} />
 
@@ -253,22 +269,26 @@ export function PackingPanel({ goalId, trip }: { goalId: number; trip: Trip }) {
                 })}
               </div>
             ) : (
-              <div className="divide-y divide-[var(--color-border)]">
-                {PACKING_CATEGORIES.map((category) => {
-                  const inKind = items.filter((item) => item.category === category);
-                  if (!inKind.length) return null;
-                  const isFolded = folded.has(category);
-                  return (
-                    <div key={category} className="py-2">
-                      <button type="button" aria-expanded={!isFolded} onClick={() => setFolded((current) => { const next = new Set(current); if (next.has(category)) next.delete(category); else next.add(category); return next; })} className="flex w-full items-center justify-between py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--ref-on-surface-variant)]">
-                        <span className="flex items-center gap-1"><ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isFolded && '-rotate-90')} aria-hidden />{CATEGORY_LABELS[category]}</span>
-                        <span className="tabular-nums tracking-normal">{inKind.filter((item) => item.done).length}/{inKind.length}</span>
-                      </button>
-                      {!isFolded && <ul className="mt-1">{inKind.map((item) => <ItemRow key={item.id} {...rowProps(item)} />)}</ul>}
-                    </div>
-                  );
-                })}
-              </div>
+              listed.length === 0 ? (
+                <p className="py-6 text-center text-sm text-[var(--ref-on-surface-variant)]">Everything here is packed.</p>
+              ) : (
+                <div className="space-y-3">
+                  {PACKING_CATEGORIES.map((category) => {
+                    const inKind = listed.filter((item) => item.category === category);
+                    if (!inKind.length) return null;
+                    const isFolded = folded.has(category);
+                    return (
+                      <div key={category}>
+                        <button type="button" aria-expanded={!isFolded} onClick={() => setFolded((current) => { const next = new Set(current); if (next.has(category)) next.delete(category); else next.add(category); return next; })} className="group flex items-center gap-1 py-1 text-xs font-semibold text-[var(--ref-on-surface-variant)] hover:text-[var(--ref-on-surface)]">
+                          {CATEGORY_LABELS[category]}
+                          <ChevronDown className={cn('h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100', isFolded && '-rotate-90 opacity-100')} aria-hidden />
+                        </button>
+                        {!isFolded && <ul>{inKind.map((item) => <ItemRow key={item.id} {...rowProps(item)} />)}</ul>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             )}
 
             {starting
