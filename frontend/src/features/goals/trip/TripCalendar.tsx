@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { Modal } from '../../../components/ui/Modal';
 import { toast } from '../../../components/ui/useToast';
 import { cn } from '../../../lib/utils';
@@ -49,6 +50,8 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
   const pan = useRef<{ x: number; left: number; moved: boolean } | null>(null);
   const panned = useRef(false);
   const [grabbing, setGrabbing] = useState(false);
+  // The empty slot under the pointer, shown as where a new plan would go.
+  const [hover, setHover] = useState<{ day: string; time: string } | null>(null);
   const [dialog, setDialog] = useState<{ day: string; time: string | null; plan?: Plan } | null>(null);
   const [dragged, setDragged] = useState<Plan | null>(null);
   const [overDay, setOverDay] = useState<string | null>(null);
@@ -63,7 +66,8 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
 
   const timeAt = (event: React.MouseEvent | React.DragEvent) => {
     const rect = event.currentTarget.getBoundingClientRect();
-    const minutes = from * 60 + Math.round(((event.clientY - rect.top) / HOUR) * 60 / 30) * 30;
+    // The half hour the pointer is in, not the nearest line, so the hint sits under it.
+    const minutes = from * 60 + Math.floor(((event.clientY - rect.top) / HOUR) * 60 / 30) * 30;
     return clockOf(Math.max(from * 60, Math.min(to * 60 - 30, minutes)));
   };
   const move = (plan: Plan, day: string, time: string | null) => {
@@ -113,7 +117,7 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
   return (
     <>
       <div
-        className={cn('overflow-x-auto [scrollbar-color:var(--ref-outline)_transparent] [scrollbar-width:thin]', grabbing ? 'cursor-grabbing select-none' : 'cursor-grab')}
+        className={cn('overflow-x-auto [scrollbar-color:var(--ref-outline)_transparent] [scrollbar-width:thin]', grabbing && 'cursor-grabbing select-none')}
         onPointerDown={startPan}
         onPointerMove={movePan}
         onPointerUp={endPan}
@@ -140,13 +144,14 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
                 onDragOver={(event) => { if (dragged) event.preventDefault(); }}
                 onDrop={(event) => { event.preventDefault(); dropOn(day.key, null); }}
                 onClick={(event) => { if (event.target === event.currentTarget) add(day.key, null); }}
-                className={cn('min-h-[40px] space-y-1 border-b border-l border-[var(--color-border)] p-1.5', day.key === today && 'bg-[var(--ref-primary)]/5')}
+                className={cn('group min-h-[40px] cursor-pointer space-y-1 border-b border-l border-[var(--color-border)] p-1.5', day.key === today && 'bg-[var(--ref-primary)]/5')}
               >
                 {untimed.map((item) => {
                   if (item.type === 'plan') return <button key={`plan-${item.plan.id}`} type="button" {...dragProps(item.plan)} onClick={() => setDialog({ day: day.key, time: null, plan: item.plan })} className="block w-full truncate rounded-md bg-[var(--ref-primary)]/15 px-2 py-1 text-left text-xs font-medium text-[var(--ref-on-surface)] hover:bg-[var(--ref-primary)]/25">{item.plan.title}</button>;
                   const Icon = BOOKING_ICONS[item.booking.kind];
                   return <span key={`${item.role}-${item.booking.id}`} className="flex items-center gap-1 truncate rounded-md bg-[var(--ref-surface-container-high)] px-2 py-1 text-xs text-[var(--ref-on-surface)]"><Icon className="h-3 w-3 shrink-0" aria-hidden />{blockTitle(item)}</span>;
                 })}
+                <span className="pointer-events-none hidden items-center gap-1 rounded-md border border-dashed border-[var(--ref-primary)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--ref-primary)] group-hover:flex"><Plus className="h-3 w-3" aria-hidden />Add without a time</span>
               </div>
             );
           })}
@@ -161,13 +166,28 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
             <div
               key={day.key}
               role="presentation"
-              onClick={(event) => { if (event.target === event.currentTarget) add(day.key, timeAt(event)); }}
+              onClick={(event) => { if (event.target === event.currentTarget || (event.target as HTMLElement).dataset.slot) add(day.key, timeAt(event)); }}
+              onMouseMove={(event) => {
+                if (grabbing || dragged || event.target !== event.currentTarget) return;
+                const time = timeAt(event);
+                if (hover?.day !== day.key || hover.time !== time) setHover({ day: day.key, time });
+              }}
+              onMouseLeave={() => setHover(null)}
               onDragOver={(event) => { if (!dragged) return; event.preventDefault(); if (overDay !== day.key) setOverDay(day.key); }}
               onDrop={(event) => { event.preventDefault(); if (dragged) dropOn(day.key, timeAt(event)); }}
-              className={cn('relative border-l border-[var(--color-border)]', day.key === today && 'bg-[var(--ref-primary)]/5', overDay === day.key && 'bg-[var(--ref-primary)]/10')}
+              className={cn('relative cursor-pointer border-l border-[var(--color-border)]', day.key === today && 'bg-[var(--ref-primary)]/5', overDay === day.key && 'bg-[var(--ref-primary)]/10')}
               style={{ height, backgroundImage: `repeating-linear-gradient(to bottom, var(--color-border) 0, var(--color-border) 1px, transparent 1px, transparent ${HOUR}px)` }}
-              title={`Click to add a plan on ${dayLabel(day.key)}`}
             >
+              {/* Where a new plan would go: click it to add one then. */}
+              {hover?.day === day.key && !grabbing && !dragged && (
+                <span
+                  data-slot="1"
+                  className="pointer-events-none absolute inset-x-1 z-0 flex items-center gap-1 rounded-md border border-dashed border-[var(--ref-primary)] bg-[var(--ref-primary)]/10 px-1.5 text-[11px] font-semibold text-[var(--ref-primary)]"
+                  style={{ top: ((minutesOf(hover.time) - from * 60) / 60) * HOUR + 1, height: HOUR / 2 - 2 }}
+                >
+                  <Plus className="h-3 w-3 shrink-0" aria-hidden />Add a plan at {hover.time}
+                </span>
+              )}
               {calendarLanes(blocks[at]).map((block) => {
                 const top = ((block.start - from * 60) / 60) * HOUR;
                 const tall = Math.max(22, ((block.end - block.start) / 60) * HOUR - 2);
