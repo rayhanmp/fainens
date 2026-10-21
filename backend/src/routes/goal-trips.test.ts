@@ -105,6 +105,13 @@ describe("goal trips", () => {
     const moved = (await inject("PUT", "/api/goals/1/plans/order", { day: "2027-03-11", ids: [market.id, temple.id] })).json();
     expect(moved.map((plan: { title: string; day: string }) => `${plan.day} ${plan.title}`)).toEqual(["2027-03-11 Nishiki market", "2027-03-11 Fushimi Inari", "2027-03-12 teamLab"]);
     expect((await inject("POST", "/api/goals/1/plans", { day: "11 March", title: "x" })).statusCode).toBe(400);
+    // A plan can take a stretch of time; it has to end after it starts, and loses its end with its time.
+    const lunch = (await inject("POST", "/api/goals/1/plans", { day: "2027-03-12", time: "12:00", endTime: "13:30", title: "Lunch" })).json();
+    expect([lunch.time, lunch.endTime]).toEqual(["12:00", "13:30"]);
+    expect((await inject("PATCH", `/api/goal-plans/${lunch.id}`, { time: "14:00" })).statusCode).toBe(400);
+    expect((await inject("PATCH", `/api/goal-plans/${lunch.id}`, { time: "11:00", endTime: "12:15" })).json().endTime).toBe("12:15");
+    expect((await inject("PATCH", `/api/goal-plans/${lunch.id}`, { time: null })).json().endTime).toBeNull();
+    await inject("DELETE", `/api/goal-plans/${lunch.id}`);
 
     const rayhan = (await inject("POST", "/api/goals/1/travellers", { name: "Rayhan", passportExpiry: day(5, 1) })).json();
     const kid = (await inject("POST", "/api/goals/1/travellers", { name: "Kid", paying: false })).json();

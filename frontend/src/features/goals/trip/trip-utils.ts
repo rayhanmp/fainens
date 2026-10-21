@@ -34,7 +34,7 @@ export type TripBooking = {
   paid: number;
 };
 
-export type TripPlan = { id: number; day: string; time: string | null; title: string; place: string | null; cost: number; costCurrency: string; rupiah: number; sortOrder: number };
+export type TripPlan = { id: number; day: string; time: string | null; endTime?: string | null; title: string; place: string | null; cost: number; costCurrency: string; rupiah: number; sortOrder: number };
 export type TripTraveller = { id: number; name: string; paying: boolean; passportExpiry: number | null };
 
 export const BOOKING_KINDS: Record<BookingKind, { label: string; plural: string; titleHint: string }> = {
@@ -363,7 +363,7 @@ export function tripCalendar(goalName: string, bookings: readonly TripBooking[],
     events.push([`UID:booking-${booking.id}@fainens`, `SUMMARY:${icsText(booking.title)}`, ...timed(booking.startAt, booking.endAt), ...(where ? [`LOCATION:${icsText(where)}`] : []), `DESCRIPTION:${icsText(notes)}`]);
   }
   for (const plan of plans) {
-    events.push([`UID:plan-${plan.id}@fainens`, `SUMMARY:${icsText(plan.title)}`, ...timed(toWall(plan.day, plan.time), null), ...(plan.place ? [`LOCATION:${icsText(plan.place)}`] : []), `DESCRIPTION:${icsText(goalName)}`]);
+    events.push([`UID:plan-${plan.id}@fainens`, `SUMMARY:${icsText(plan.title)}`, ...timed(toWall(plan.day, plan.time), plan.time && plan.endTime ? toWall(plan.day, plan.endTime) : null), ...(plan.place ? [`LOCATION:${icsText(plan.place)}`] : []), `DESCRIPTION:${icsText(goalName)}`]);
   }
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Fainens//Trip//EN', 'CALSCALE:GREGORIAN', `X-WR-CALNAME:${icsText(goalName)}`, ...events.flatMap((event) => ['BEGIN:VEVENT', `DTSTAMP:${stamp}`, ...event, 'END:VEVENT']), 'END:VCALENDAR'];
   return `${lines.map(fold).join('\r\n')}\r\n`;

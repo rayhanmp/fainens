@@ -130,9 +130,10 @@ test('the calendar file has an event for each dated booking and plan', () => {
     booking({ id: 2, kind: 'stay', title: 'Hotel; Shinjuku', startAt: toWall('2027-03-10', '15:00'), endAt: toWall('2027-03-12', '11:00') }),
     booking({ id: 3, kind: 'transport', title: 'JR Pass', startAt: toWall('2027-03-11', null), endAt: toWall('2027-03-13', null) }),
     booking({ id: 4, title: 'No date' }),
-  ], [plan({ id: 9, day: '2027-03-11', time: '09:00', title: 'Meiji Shrine', place: 'Shibuya' })], Date.UTC(2026, 9, 21));
+  ], [plan({ id: 9, day: '2027-03-11', time: '09:00', title: 'Meiji Shrine', place: 'Shibuya' }), plan({ id: 10, day: '2027-03-11', time: '12:00', endTime: '13:30', title: 'Lunch' })], Date.UTC(2026, 9, 21));
+  assert.match(ics, /SUMMARY:Lunch\r\nDTSTART:20270311T120000\r\nDTEND:20270311T133000/);
   assert.ok(ics.startsWith('BEGIN:VCALENDAR\r\n'));
-  assert.equal(ics.match(/BEGIN:VEVENT/g).length, 5);
+  assert.equal(ics.match(/BEGIN:VEVENT/g).length, 6);
   assert.match(ics, /SUMMARY:GA874\r\nDTSTART:20270310T060000\r\nDTEND:20270310T153000/);
   assert.match(ics, /SUMMARY:Check in: Hotel\\; Shinjuku/);
   assert.match(ics, /DTSTART;VALUE=DATE:20270311\r\nDTEND;VALUE=DATE:20270314/);

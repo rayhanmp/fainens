@@ -341,6 +341,8 @@ export const goalPlans = sqliteTable("goal_plan", {
   goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
   day: text("day").notNull(),
   time: text("time"),
+  /** When it ends, as `HH:MM` the same day; null for a plan without a set length. */
+  endTime: text("end_time"),
   title: text("title").notNull(),
   place: text("place"),
   cost: real("cost").notNull().default(0),

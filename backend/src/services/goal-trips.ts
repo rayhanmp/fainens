@@ -157,6 +157,7 @@ export const planView = (row: typeof goalPlans.$inferSelect, basics: TripBasics)
   goalId: row.goalId,
   day: row.day,
   time: row.time ?? null,
+  endTime: row.time ? row.endTime ?? null : null,
   title: row.title,
   place: row.place ?? null,
   cost: row.cost,

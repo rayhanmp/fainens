@@ -7940,6 +7940,8 @@ export type GetGoalTrip200PlansItem = {
   day: string;
   /** @nullable */
   time: string | null;
+  /** @nullable */
+  endTime: string | null;
   title: string;
   /** @nullable */
   place: string | null;
@@ -8243,6 +8245,8 @@ export type UpdateGoalTrip200PlansItem = {
   day: string;
   /** @nullable */
   time: string | null;
+  /** @nullable */
+  endTime: string | null;
   title: string;
   /** @nullable */
   place: string | null;
@@ -8875,6 +8879,11 @@ export type AddTripPlanBody = {
    */
   time?: string | null;
   /**
+   * @nullable
+   * @pattern ^\d{2}:\d{2}$
+   */
+  endTime?: string | null;
+  /**
    * @minLength 1
    * @maxLength 120
    */
@@ -8907,6 +8916,8 @@ export type AddTripPlan201 = {
   day: string;
   /** @nullable */
   time: string | null;
+  /** @nullable */
+  endTime: string | null;
   title: string;
   /** @nullable */
   place: string | null;
@@ -8938,6 +8949,11 @@ export type UpdateTripPlanBody = {
    * @pattern ^\d{2}:\d{2}$
    */
   time?: string | null;
+  /**
+   * @nullable
+   * @pattern ^\d{2}:\d{2}$
+   */
+  endTime?: string | null;
   /**
    * @minLength 1
    * @maxLength 120
@@ -8971,6 +8987,8 @@ export type UpdateTripPlan200 = {
   day: string;
   /** @nullable */
   time: string | null;
+  /** @nullable */
+  endTime: string | null;
   title: string;
   /** @nullable */
   place: string | null;
@@ -9030,6 +9048,8 @@ export type MoveTripPlans200Item = {
   day: string;
   /** @nullable */
   time: string | null;
+  /** @nullable */
+  endTime: string | null;
   title: string;
   /** @nullable */
   place: string | null;

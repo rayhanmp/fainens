@@ -52,7 +52,7 @@ function ItemRow({ item, onEdit, dragging, onDragStart, onDragEnd, onDragOverPla
       onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); onDragOverPlan(plan); }}
       className={cn('group relative flex items-start gap-3 py-2', dragging && 'opacity-40', dropBefore && 'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:rounded-full before:bg-[var(--ref-primary)]')}
     >
-      <span className="w-11 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-[var(--ref-on-surface-variant)]">{plan.time ?? ''}</span>
+      <span className="w-11 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-[var(--ref-on-surface-variant)]">{plan.time ?? ''}{plan.time && plan.endTime && <span className="block font-normal">–{plan.endTime}</span>}</span>
       <GripVertical className="mt-0.5 h-4 w-4 shrink-0 cursor-grab text-[var(--ref-on-surface-variant)] opacity-50 group-hover:opacity-100" aria-hidden />
       <div className="min-w-0 flex-1">
         <button type="button" onClick={() => onEdit(plan)} className="block max-w-full text-left text-sm text-[var(--ref-on-surface)] hover:underline">{plan.title}</button>
@@ -146,7 +146,7 @@ export function ItinerarySection({ goalId, goalName, trip, typeData, now }: { go
       ) : view === 'calendar' ? (
         <>
           <TripCalendar goalId={goalId} trip={trip} days={days} cities={cities} today={today} onOpenDay={(day) => { setPicked(day); setView('day'); }} />
-          <p className="border-t border-[var(--color-border)] px-4 py-2.5 text-xs text-[var(--ref-on-surface-variant)] sm:px-5">Click a free spot to add a plan then, or a plan to change it; drag a plan to another day or time. Drag a free spot sideways to move the calendar. A day’s name opens it on its own.</p>
+          <p className="border-t border-[var(--color-border)] px-4 py-2.5 text-xs text-[var(--ref-on-surface-variant)] sm:px-5">Drag down a free stretch to block out time for a plan, or click for an hour. Drag a plan to move it, or its bottom edge to make it longer or shorter. Drag sideways to move along the days. A day’s name opens it on its own.</p>
         </>
       ) : (
         <>

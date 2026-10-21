@@ -24,7 +24,8 @@ export function printItinerary(goalName: string, basics: TripBasics, bookings: r
   const { days } = itinerary(basics, bookings, plans);
   const html = days.map((day) => {
     const items = day.items.map((item) => {
-      const time = item.time ? `<strong>${item.time}</strong> · ` : '';
+      const end = item.type === 'plan' && item.time && item.plan.endTime ? `–${item.plan.endTime}` : '';
+      const time = item.time ? `<strong>${item.time}${end}</strong> · ` : '';
       if (item.type === 'plan') {
         const plan = item.plan;
         const cost = plan.cost > 0 ? ` · ${escape(plan.costCurrency === 'IDR' ? amount(plan.rupiah) : costText(plan.cost, plan.costCurrency))}` : '';

@@ -1,26 +1,28 @@
 import { useRef, useState } from 'react';
-import { Plus } from 'lucide-react';
-import { Modal } from '../../../components/ui/Modal';
 import { toast } from '../../../components/ui/useToast';
 import { cn } from '../../../lib/utils';
 import { BOOKING_ICONS } from './booking-icons';
-import { PlanForm } from './PlanForm';
+import { PlanDialog } from './PlanForm';
 import { useUpdatePlanMutation, type Trip } from './queries';
-import { calendarLanes, clockOf, dayLabel, minutesOf, wallDay, wallTime, type DayItem, type TripPlan as Plan } from './trip-utils';
+import { calendarLanes, clockOf, minutesOf, wallDay, wallTime, type DayItem, type TripPlan as Plan } from './trip-utils';
 
 const HOUR = 48;
+const SNAP = 15;
 const ROLE: Record<string, string> = { leave: 'Leaves', arrive: 'Lands', 'check-in': 'Check in', 'check-out': 'Check out', on: '' };
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
+const snap = (minutes: number) => Math.round(minutes / SNAP) * SNAP;
 
 type CalendarDay = { key: string; index: number; noon: number; items: DayItem[] };
 type Block = { id: string; item: DayItem; start: number; end: number };
 
-/** How long a thing takes up on the calendar: a flight until it lands that day, a check-in or out a moment, the rest an hour. */
+/** How long a thing takes up: a plan until its end (an hour without one), a flight until it lands that day, a check-in or out a moment. */
 function blockOf(item: DayItem): Block | null {
   if (item.time === null) return null;
   const start = minutesOf(item.time);
   let end = start + 60;
-  if (item.type === 'booking') {
+  if (item.type === 'plan') {
+    if (item.plan.endTime) end = Math.max(start + SNAP, minutesOf(item.plan.endTime));
+  } else {
     const { booking } = item;
     if (item.role === 'check-in' || item.role === 'check-out') end = start + 45;
     else if (item.role !== 'arrive' && booking.endAt !== null && booking.startAt !== null && wallDay(booking.endAt) === wallDay(booking.startAt) && wallTime(booking.endAt)) end = Math.max(start + 30, minutesOf(wallTime(booking.endAt)!));
@@ -30,12 +32,30 @@ function blockOf(item: DayItem): Block | null {
 }
 
 const blockTitle = (item: DayItem) => (item.type === 'plan' ? item.plan.title : `${ROLE[item.role] ? `${ROLE[item.role]}: ` : ''}${item.booking.title}`);
+const span = (start: number, end: number) => `${clockOf(start)} – ${clockOf(end)}`;
+
+/** What a press on the calendar is turning into: undecided until it moves, then blocking time, moving or resizing a plan, or scrolling. */
+type Gesture =
+  | { kind: 'press-empty'; x: number; y: number; day: number; minute: number; left: number; touch: boolean }
+  | { kind: 'press-plan'; x: number; y: number; plan: Plan; offset: number; touch: boolean }
+  | { kind: 'pan'; x: number; left: number }
+  | { kind: 'create'; day: number; anchor: number }
+  | { kind: 'move'; plan: Plan; offset: number; duration: number }
+  | { kind: 'resize'; plan: Plan; day: number; start: number };
+
+/** What the calendar shows while a press is under way. */
+type Preview =
+  | { kind: 'create'; day: number; start: number; end: number }
+  | { kind: 'move'; planId: number; day: number; start: number | null; end: number }
+  | { kind: 'resize'; planId: number; day: number; start: number; end: number };
 
 /**
- * The trip as a calendar: a column for each day with its city, hours down the side, bookings and
- * plans as blocks at their times (side by side when they overlap) and untimed plans along the top.
- * Click an empty slot to add a plan there, click a plan to change it, or drag it to another day or
- * time. A day's header opens that day on its own.
+ * The trip as a calendar, worked like a calendar app: a column for each day with its city, hours
+ * down the side, bookings and plans as blocks at their times and untimed plans along the top.
+ * Press and drag down a free stretch to block out time for a plan; drag a plan to move it to
+ * another day or time (or to Any time), or its bottom edge to make it longer or shorter; drag a
+ * free stretch sideways to move along the days. A click adds or opens a plan. Times snap to a
+ * quarter hour.
  */
 export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
   goalId: number;
@@ -46,86 +66,152 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
   onOpenDay: (day: string) => void;
 }) {
   const update = useUpdatePlanMutation();
-  // Grabbing the calendar and dragging sideways scrolls it; a drag that moved isn't a click.
-  const pan = useRef<{ x: number; left: number; moved: boolean } | null>(null);
-  const panned = useRef(false);
-  const [grabbing, setGrabbing] = useState(false);
-  // The empty slot under the pointer, shown as where a new plan would go.
-  const [hover, setHover] = useState<{ day: string; time: string } | null>(null);
-  const [dialog, setDialog] = useState<{ day: string; time: string | null; plan?: Plan } | null>(null);
-  const [dragged, setDragged] = useState<Plan | null>(null);
-  const [overDay, setOverDay] = useState<string | null>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  const columns = useRef<Array<HTMLDivElement | null>>([]);
+  const gesture = useRef<Gesture | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [panning, setPanning] = useState(false);
+  const [dialog, setDialog] = useState<{ day: string; time: string | null; end?: string | null; plan?: Plan } | null>(null);
   const keys = days.map((day) => day.key);
   const blocks = days.map((day) => day.items.map(blockOf).filter((block): block is Block => block !== null));
-  const allStarts = blocks.flat().map((block) => block.start);
-  const allEnds = blocks.flat().map((block) => block.end);
-  const from = Math.max(0, Math.min(7, ...allStarts.map((start) => Math.floor(start / 60))));
-  const to = Math.min(24, Math.max(22, ...allEnds.map((end) => Math.ceil(end / 60))));
+  const from = Math.max(0, Math.min(7, ...blocks.flat().map((block) => Math.floor(block.start / 60))));
+  const to = Math.min(24, Math.max(22, ...blocks.flat().map((block) => Math.ceil(block.end / 60))));
   const height = (to - from) * HOUR;
-  const columns = `52px repeat(${days.length}, minmax(124px, 1fr))`;
+  const grid = `52px repeat(${days.length}, minmax(124px, 1fr))`;
+  const plans = new Map(trip.plans.map((plan) => [plan.id, plan]));
 
-  const timeAt = (event: React.MouseEvent | React.DragEvent) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    // The half hour the pointer is in, not the nearest line, so the hint sits under it.
-    const minutes = from * 60 + Math.floor(((event.clientY - rect.top) / HOUR) * 60 / 30) * 30;
-    return clockOf(Math.max(from * 60, Math.min(to * 60 - 30, minutes)));
+  /** The day column and minute under a point; minute is null above the hours (the Any time row). */
+  const slotAt = (x: number, y: number) => {
+    const rects = columns.current.map((column) => column?.getBoundingClientRect());
+    let day = rects.findIndex((rect) => rect && x >= rect.left && x < rect.right);
+    if (day === -1) day = x < (rects[0]?.left ?? 0) ? 0 : rects.length - 1;
+    const rect = rects[day];
+    if (!rect) return null;
+    if (y < rect.top) return { day, minute: null };
+    const minute = from * 60 + ((y - rect.top) / HOUR) * 60;
+    return { day, minute: Math.max(from * 60, Math.min(to * 60, minute)) };
   };
-  const move = (plan: Plan, day: string, time: string | null) => {
-    if (plan.day === day && plan.time === time) return;
-    update.mutate({ id: plan.id, day, time }, { onError: (error) => toast.error(errorText(error, 'Could not move the plan')) });
-  };
-  const dropOn = (day: string, time: string | null) => {
-    if (dragged) move(dragged, day, time);
-    setDragged(null);
-    setOverDay(null);
-  };
-  const dragProps = (plan: Plan) => ({
-    draggable: true,
-    onDragStart: (event: React.DragEvent) => { event.stopPropagation(); event.dataTransfer.setData('text/plain', String(plan.id)); event.dataTransfer.effectAllowed = 'move'; setDragged(plan); },
-    onDragEnd: () => { setDragged(null); setOverDay(null); },
-  });
 
-  const startPan = (event: React.PointerEvent<HTMLDivElement>) => {
-    // Only the mouse, and not from a plan (those drag to move) or a button.
-    if (event.pointerType !== 'mouse' || event.button !== 0 || (event.target as HTMLElement).closest('button, [draggable="true"]')) return;
-    pan.current = { x: event.clientX, left: event.currentTarget.scrollLeft, moved: false };
-    panned.current = false;
+  const save = (plan: Plan, body: { day: string; time: string | null; endTime: string | null }) => {
+    if (plan.day === body.day && plan.time === body.time && (plan.endTime ?? null) === body.endTime) return;
+    update.mutate({ id: plan.id, ...body }, { onError: (error) => toast.error(errorText(error, 'Could not move the plan')) });
   };
-  const movePan = (event: React.PointerEvent<HTMLDivElement>) => {
-    const start = pan.current;
-    if (!start) return;
-    const dx = event.clientX - start.x;
-    if (!start.moved && Math.abs(dx) < 5) return;
-    if (!start.moved) {
-      start.moved = true;
-      setGrabbing(true);
-      event.currentTarget.setPointerCapture(event.pointerId);
+
+  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    const touch = event.pointerType === 'touch';
+    const resize = target.closest<HTMLElement>('[data-resize]');
+    const planEl = target.closest<HTMLElement>('[data-plan]');
+    const column = target.closest<HTMLElement>('[data-col]');
+    if (resize && !touch) {
+      const plan = plans.get(Number(resize.dataset.resize));
+      const block = plan && blockOf({ type: 'plan', plan, time: plan.time });
+      if (!plan || !block) return;
+      gesture.current = { kind: 'resize', plan, day: keys.indexOf(plan.day), start: block.start };
+    } else if (planEl) {
+      const plan = plans.get(Number(planEl.dataset.plan));
+      if (!plan) return;
+      const slot = slotAt(event.clientX, event.clientY);
+      const start = plan.time ? minutesOf(plan.time) : null;
+      gesture.current = { kind: 'press-plan', x: event.clientX, y: event.clientY, plan, offset: start !== null && slot?.minute != null ? slot.minute - start : 0, touch };
+    } else if (column) {
+      const slot = slotAt(event.clientX, event.clientY);
+      if (!slot || slot.minute === null) return;
+      gesture.current = { kind: 'press-empty', x: event.clientX, y: event.clientY, day: slot.day, minute: slot.minute, left: scroller.current?.scrollLeft ?? 0, touch };
+    } else {
+      return;
     }
-    event.currentTarget.scrollLeft = start.left - dx;
+    if (!touch) event.currentTarget.setPointerCapture(event.pointerId);
   };
-  const endPan = () => {
-    panned.current = Boolean(pan.current?.moved);
-    pan.current = null;
-    setGrabbing(false);
+
+  const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const current = gesture.current;
+    if (!current) return;
+    if (current.kind === 'press-empty' || current.kind === 'press-plan') {
+      const dx = event.clientX - current.x;
+      const dy = event.clientY - current.y;
+      if (Math.hypot(dx, dy) < 5 || current.touch) return;
+      if (current.kind === 'press-plan') {
+        const block = blockOf({ type: 'plan', plan: current.plan, time: current.plan.time });
+        gesture.current = { kind: 'move', plan: current.plan, offset: current.offset, duration: block ? block.end - block.start : 60 };
+      } else if (Math.abs(dx) > Math.abs(dy)) {
+        gesture.current = { kind: 'pan', x: current.x, left: current.left };
+        setPanning(true);
+      } else {
+        gesture.current = { kind: 'create', day: current.day, anchor: snap(current.minute) };
+      }
+    }
+    const active = gesture.current;
+    if (!active) return;
+    if (active.kind === 'pan') {
+      if (scroller.current) scroller.current.scrollLeft = active.left - (event.clientX - active.x);
+      return;
+    }
+    const slot = slotAt(event.clientX, event.clientY);
+    if (!slot) return;
+    if (active.kind === 'create') {
+      const minute = snap(slot.minute ?? from * 60);
+      const start = Math.min(active.anchor, minute);
+      const end = Math.max(active.anchor, minute);
+      setPreview({ kind: 'create', day: active.day, start, end: Math.max(end, start + SNAP) });
+    } else if (active.kind === 'move') {
+      if (slot.minute === null) return setPreview({ kind: 'move', planId: active.plan.id, day: slot.day, start: null, end: 0 });
+      const start = Math.max(from * 60, Math.min(24 * 60 - active.duration, snap(slot.minute - active.offset)));
+      setPreview({ kind: 'move', planId: active.plan.id, day: slot.day, start, end: start + active.duration });
+    } else if (active.kind === 'resize') {
+      const end = Math.max(active.start + SNAP, Math.min(24 * 60, snap(slot.minute ?? active.start)));
+      setPreview({ kind: 'resize', planId: active.plan.id, day: active.day, start: active.start, end });
+    }
   };
-  const add = (day: string, time: string | null) => {
-    // The click that ends a drag across the calendar doesn't add a plan.
-    if (panned.current) { panned.current = false; return; }
-    setDialog({ day, time });
+
+  const onPointerUp = () => {
+    const current = gesture.current;
+    const shown = preview;
+    gesture.current = null;
+    setPreview(null);
+    setPanning(false);
+    if (!current) return;
+    if (current.kind === 'press-empty') {
+      // A click: a plan at that half hour.
+      const start = Math.floor(current.minute / 30) * 30;
+      setDialog({ day: keys[current.day], time: clockOf(start), end: clockOf(Math.min(24 * 60 - 1, start + 60)) });
+    } else if (current.kind === 'press-plan') {
+      setDialog({ day: current.plan.day, time: current.plan.time, plan: current.plan });
+    } else if (current.kind === 'create' && shown?.kind === 'create') {
+      setDialog({ day: keys[shown.day], time: clockOf(shown.start), end: clockOf(Math.min(24 * 60 - 1, shown.end)) });
+    } else if (current.kind === 'move' && shown?.kind === 'move') {
+      save(current.plan, shown.start === null
+        ? { day: keys[shown.day], time: null, endTime: null }
+        : { day: keys[shown.day], time: clockOf(shown.start), endTime: current.plan.endTime ? clockOf(Math.min(24 * 60 - 1, shown.end)) : null });
+    } else if (current.kind === 'resize' && shown?.kind === 'resize') {
+      save(current.plan, { day: current.plan.day, time: current.plan.time, endTime: clockOf(Math.min(24 * 60 - 1, shown.end)) });
+    }
   };
+
+  const ghost = (start: number, end: number, label: string, solid = false) => (
+    <span
+      className={cn('pointer-events-none absolute inset-x-1 z-20 overflow-hidden rounded-md px-1.5 py-0.5 text-xs', solid ? 'bg-[var(--ref-primary)] text-[var(--color-surface)] shadow-lg' : 'border border-dashed border-[var(--ref-primary)] bg-[var(--ref-primary)]/15 font-semibold text-[var(--ref-primary)]')}
+      style={{ top: ((start - from * 60) / 60) * HOUR + 1, height: Math.max(18, ((end - start) / 60) * HOUR - 2) }}
+    >
+      <span className="block truncate font-semibold">{label}</span>
+      <span className="block truncate text-[10px] opacity-80">{span(start, end)}</span>
+    </span>
+  );
 
   return (
     <>
       <div
-        className={cn('overflow-x-auto [scrollbar-color:var(--ref-outline)_transparent] [scrollbar-width:thin]', grabbing && 'cursor-grabbing select-none')}
-        onPointerDown={startPan}
-        onPointerMove={movePan}
-        onPointerUp={endPan}
-        onPointerCancel={endPan}
+        ref={scroller}
+        className={cn('select-none overflow-x-auto [scrollbar-color:var(--ref-outline)_transparent] [scrollbar-width:thin]', panning && 'cursor-grabbing', preview?.kind === 'resize' && 'cursor-ns-resize', preview?.kind === 'move' && 'cursor-grabbing')}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={() => { gesture.current = null; setPreview(null); setPanning(false); }}
       >
-        <div className="grid" style={{ gridTemplateColumns: columns, minWidth: 52 + days.length * 124 }}>
+        <div className="grid" style={{ gridTemplateColumns: grid, minWidth: 52 + days.length * 124 }}>
           {/* Day headers, with the city; each opens that day. */}
-          <div className="sticky left-0 z-20 border-b border-[var(--color-border)] bg-[var(--color-surface)]" />
+          <div className="sticky left-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-surface)]" />
           {days.map((day, at) => (
             <button key={day.key} type="button" onClick={() => onOpenDay(day.key)} className={cn('border-b border-l border-[var(--color-border)] px-2 py-2 text-left hover:bg-[var(--ref-surface-container-low)]', day.key === today && 'bg-[var(--ref-primary)]/10')}>
               <span className={cn('block text-[11px] font-bold uppercase tracking-wide', day.key === today ? 'text-[var(--ref-primary)]' : 'text-[var(--ref-on-surface-variant)]')}>Day {day.index}{day.key === today ? ' · today' : ''}</span>
@@ -134,30 +220,41 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
             </button>
           ))}
 
-          {/* Plans without a time, and the stay for the night. */}
-          <div className="sticky left-0 z-20 flex items-start border-b border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-2 text-[10px] font-bold uppercase leading-tight tracking-wide text-[var(--ref-on-surface-variant)]">Any time</div>
-          {days.map((day) => {
+          {/* Plans without a time; drop a plan here to take its time away. */}
+          <div className="sticky left-0 z-30 flex items-start border-b border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-2 text-[10px] font-bold uppercase leading-tight tracking-wide text-[var(--ref-on-surface-variant)]">Any time</div>
+          {days.map((day, at) => {
             const untimed = day.items.filter((item) => item.time === null);
+            const dropping = preview?.kind === 'move' && preview.start === null && preview.day === at;
             return (
               <div
                 key={day.key}
-                onDragOver={(event) => { if (dragged) event.preventDefault(); }}
-                onDrop={(event) => { event.preventDefault(); dropOn(day.key, null); }}
-                onClick={(event) => { if (event.target === event.currentTarget) add(day.key, null); }}
-                className={cn('group min-h-[40px] cursor-pointer space-y-1 border-b border-l border-[var(--color-border)] p-1.5', day.key === today && 'bg-[var(--ref-primary)]/5')}
+                onClick={(event) => { if (event.target === event.currentTarget) setDialog({ day: day.key, time: null }); }}
+                className={cn('group min-h-[40px] cursor-pointer space-y-1 border-b border-l border-[var(--color-border)] p-1.5', day.key === today && 'bg-[var(--ref-primary)]/5', dropping && 'bg-[var(--ref-primary)]/15 ring-2 ring-inset ring-[var(--ref-primary)]')}
               >
                 {untimed.map((item) => {
-                  if (item.type === 'plan') return <button key={`plan-${item.plan.id}`} type="button" {...dragProps(item.plan)} onClick={() => setDialog({ day: day.key, time: null, plan: item.plan })} className="block w-full truncate rounded-md bg-[var(--ref-primary)]/15 px-2 py-1 text-left text-xs font-medium text-[var(--ref-on-surface)] hover:bg-[var(--ref-primary)]/25">{item.plan.title}</button>;
+                  if (item.type === 'plan') {
+                    const moving = preview?.kind === 'move' && preview.planId === item.plan.id;
+                    return (
+                      <button
+                        key={`plan-${item.plan.id}`}
+                        type="button"
+                        data-plan={item.plan.id}
+                        onClick={(event) => { if (event.detail === 0) setDialog({ day: day.key, time: null, plan: item.plan }); }}
+                        className={cn('block w-full cursor-grab truncate rounded-md bg-[var(--ref-primary)]/15 px-2 py-1 text-left text-xs font-medium text-[var(--ref-on-surface)] hover:bg-[var(--ref-primary)]/25', moving && 'opacity-30')}
+                      >
+                        {item.plan.title}
+                      </button>
+                    );
+                  }
                   const Icon = BOOKING_ICONS[item.booking.kind];
                   return <span key={`${item.role}-${item.booking.id}`} className="flex items-center gap-1 truncate rounded-md bg-[var(--ref-surface-container-high)] px-2 py-1 text-xs text-[var(--ref-on-surface)]"><Icon className="h-3 w-3 shrink-0" aria-hidden />{blockTitle(item)}</span>;
                 })}
-                <span className="pointer-events-none hidden items-center gap-1 rounded-md border border-dashed border-[var(--ref-primary)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--ref-primary)] group-hover:flex"><Plus className="h-3 w-3" aria-hidden />Add without a time</span>
               </div>
             );
           })}
 
           {/* The hours. */}
-          <div className="sticky left-0 z-20 bg-[var(--color-surface)]" style={{ height }}>
+          <div className="sticky left-0 z-30 bg-[var(--color-surface)]" style={{ height }}>
             {Array.from({ length: to - from }, (_, hour) => (
               <span key={hour} className="absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-[var(--ref-on-surface-variant)]" style={{ top: hour * HOUR }}>{hour === 0 ? '' : clockOf((from + hour) * 60)}</span>
             ))}
@@ -165,46 +262,33 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
           {days.map((day, at) => (
             <div
               key={day.key}
-              role="presentation"
-              onClick={(event) => { if (event.target === event.currentTarget || (event.target as HTMLElement).dataset.slot) add(day.key, timeAt(event)); }}
-              onMouseMove={(event) => {
-                if (grabbing || dragged || event.target !== event.currentTarget) return;
-                const time = timeAt(event);
-                if (hover?.day !== day.key || hover.time !== time) setHover({ day: day.key, time });
-              }}
-              onMouseLeave={() => setHover(null)}
-              onDragOver={(event) => { if (!dragged) return; event.preventDefault(); if (overDay !== day.key) setOverDay(day.key); }}
-              onDrop={(event) => { event.preventDefault(); if (dragged) dropOn(day.key, timeAt(event)); }}
-              className={cn('relative cursor-pointer border-l border-[var(--color-border)]', day.key === today && 'bg-[var(--ref-primary)]/5', overDay === day.key && 'bg-[var(--ref-primary)]/10')}
-              style={{ height, backgroundImage: `repeating-linear-gradient(to bottom, var(--color-border) 0, var(--color-border) 1px, transparent 1px, transparent ${HOUR}px)` }}
+              ref={(node) => { columns.current[at] = node; }}
+              data-col={at}
+              className={cn('relative cursor-pointer border-l border-[var(--color-border)]', day.key === today && 'bg-[var(--ref-primary)]/5')}
+              style={{ height, backgroundImage: `repeating-linear-gradient(to bottom, var(--color-border) 0, var(--color-border) 1px, transparent 1px, transparent ${HOUR / 2}px, color-mix(in srgb, var(--color-border) 45%, transparent) ${HOUR / 2}px, color-mix(in srgb, var(--color-border) 45%, transparent) ${HOUR / 2 + 1}px, transparent ${HOUR / 2 + 1}px, transparent ${HOUR}px)` }}
             >
-              {/* Where a new plan would go: click it to add one then. */}
-              {hover?.day === day.key && !grabbing && !dragged && (
-                <span
-                  data-slot="1"
-                  className="pointer-events-none absolute inset-x-1 z-0 flex items-center gap-1 rounded-md border border-dashed border-[var(--ref-primary)] bg-[var(--ref-primary)]/10 px-1.5 text-[11px] font-semibold text-[var(--ref-primary)]"
-                  style={{ top: ((minutesOf(hover.time) - from * 60) / 60) * HOUR + 1, height: HOUR / 2 - 2 }}
-                >
-                  <Plus className="h-3 w-3 shrink-0" aria-hidden />Add a plan at {hover.time}
-                </span>
-              )}
               {calendarLanes(blocks[at]).map((block) => {
                 const top = ((block.start - from * 60) / 60) * HOUR;
                 const tall = Math.max(22, ((block.end - block.start) / 60) * HOUR - 2);
                 const style = { top, height: tall, left: `calc(${(block.lane / block.lanes) * 100}% + 2px)`, width: `calc(${100 / block.lanes}% - 4px)` };
                 const { item } = block;
                 if (item.type === 'plan') {
+                  const busy = preview && 'planId' in preview && preview.planId === item.plan.id;
                   return (
                     <button
                       key={block.id}
                       type="button"
-                      {...dragProps(item.plan)}
-                      onClick={() => setDialog({ day: day.key, time: item.plan.time, plan: item.plan })}
-                      className={cn('absolute z-10 overflow-hidden rounded-md bg-[var(--ref-primary)]/20 px-1.5 py-0.5 text-left text-xs text-[var(--ref-on-surface)] ring-1 ring-inset ring-[var(--ref-primary)]/30 hover:bg-[var(--ref-primary)]/30', dragged?.id === item.plan.id && 'opacity-40')}
+                      data-plan={item.plan.id}
+                      onClick={(event) => { if (event.detail === 0) setDialog({ day: day.key, time: item.plan.time, plan: item.plan }); }}
+                      className={cn('group/plan absolute z-10 cursor-grab overflow-hidden rounded-md bg-[var(--ref-primary)]/20 px-1.5 py-0.5 text-left text-xs text-[var(--ref-on-surface)] ring-1 ring-inset ring-[var(--ref-primary)]/30 hover:bg-[var(--ref-primary)]/30', busy && 'opacity-30')}
                       style={style}
                     >
                       <span className="block truncate font-semibold">{item.plan.title}</span>
-                      {tall > 34 && <span className="block truncate text-[10px] text-[var(--ref-on-surface-variant)]">{item.time}{item.plan.place ? ` · ${item.plan.place}` : ''}</span>}
+                      {tall > 34 && <span className="block truncate text-[10px] text-[var(--ref-on-surface-variant)]">{span(block.start, block.end)}{item.plan.place ? ` · ${item.plan.place}` : ''}</span>}
+                      {/* Drag the bottom edge to make it longer or shorter. */}
+                      <span data-resize={item.plan.id} className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize" aria-hidden>
+                        <span className="mx-auto mt-0.5 block h-0.5 w-6 rounded-full bg-[var(--ref-primary)] opacity-0 group-hover/plan:opacity-70" />
+                      </span>
                     </button>
                   );
                 }
@@ -216,16 +300,17 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
                   </span>
                 );
               })}
+
+              {/* What's being made, moved or stretched, and where a click would add a plan. */}
+              {preview?.kind === 'create' && preview.day === at && ghost(preview.start, preview.end, 'New plan')}
+              {preview?.kind === 'move' && preview.day === at && preview.start !== null && ghost(preview.start, preview.end, plans.get(preview.planId)?.title ?? '', true)}
+              {preview?.kind === 'resize' && preview.day === at && ghost(preview.start, preview.end, plans.get(preview.planId)?.title ?? '', true)}
             </div>
           ))}
         </div>
       </div>
 
-      {dialog && (
-        <Modal isOpen onClose={() => setDialog(null)} title={dialog.plan ? 'Change the plan' : `Add a plan · ${dayLabel(dialog.day)}`}>
-          <PlanForm goalId={goalId} trip={trip} day={dialog.day} days={keys} plan={dialog.plan} initialTime={dialog.time} onDone={() => setDialog(null)} />
-        </Modal>
-      )}
+      {dialog && <PlanDialog goalId={goalId} trip={trip} day={dialog.day} days={keys} plan={dialog.plan} initialTime={dialog.time} initialEnd={dialog.end} onClose={() => setDialog(null)} />}
     </>
   );
 }

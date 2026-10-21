@@ -16135,6 +16135,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "endTime": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "title": {
                             "type": "string"
                           },
@@ -16162,6 +16166,7 @@
                           "goalId",
                           "day",
                           "time",
+                          "endTime",
                           "title",
                           "place",
                           "cost",
@@ -16687,6 +16692,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "endTime": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "title": {
                             "type": "string"
                           },
@@ -16714,6 +16723,7 @@
                           "goalId",
                           "day",
                           "time",
+                          "endTime",
                           "title",
                           "place",
                           "cost",
@@ -18060,6 +18070,11 @@
                     "type": "string",
                     "pattern": "^\\d{2}:\\d{2}$"
                   },
+                  "endTime": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$"
+                  },
                   "title": {
                     "type": "string",
                     "minLength": 1,
@@ -18126,6 +18141,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "endTime": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "title": {
                       "type": "string"
                     },
@@ -18153,6 +18172,7 @@
                     "goalId",
                     "day",
                     "time",
+                    "endTime",
                     "title",
                     "place",
                     "cost",
@@ -18228,6 +18248,11 @@
                     "type": "string",
                     "pattern": "^\\d{2}:\\d{2}$"
                   },
+                  "endTime": {
+                    "nullable": true,
+                    "type": "string",
+                    "pattern": "^\\d{2}:\\d{2}$"
+                  },
                   "title": {
                     "type": "string",
                     "minLength": 1,
@@ -18290,6 +18315,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "endTime": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "title": {
                       "type": "string"
                     },
@@ -18317,6 +18346,7 @@
                     "goalId",
                     "day",
                     "time",
+                    "endTime",
                     "title",
                     "place",
                     "cost",
@@ -18498,6 +18528,10 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "endTime": {
+                        "nullable": true,
+                        "type": "string"
+                      },
                       "title": {
                         "type": "string"
                       },
@@ -18525,6 +18559,7 @@
                       "goalId",
                       "day",
                       "time",
+                      "endTime",
                       "title",
                       "place",
                       "cost",

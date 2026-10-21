@@ -98,7 +98,7 @@ const SAMPLE_TRIP: Trip = {
     { ...tripBooking, id: 2, kind: 'stay', title: 'Hotel in Shinjuku', cost: 63_000, costCurrency: 'JPY', rupiah: 6_646_500 },
     { ...tripBooking, id: 3, kind: 'transport', title: 'JR Pass, 7 days', cost: 50_000, costCurrency: 'JPY', rupiah: 5_275_000 },
   ],
-  plans: [{ id: 1, goalId: 1, day: '2027-03-12', time: null, title: 'Kimono rental', place: null, cost: 8_000, costCurrency: 'JPY', rupiah: 844_000, sortOrder: 0 }],
+  plans: [{ id: 1, goalId: 1, day: '2027-03-12', time: null, endTime: null, title: 'Kimono rental', place: null, cost: 8_000, costCurrency: 'JPY', rupiah: 844_000, sortOrder: 0 }],
   packing: [],
   spending: null,
 };

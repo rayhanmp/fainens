@@ -87,6 +87,7 @@ const planSchema = z.object({
   goalId: z.number().int(),
   day: z.string(),
   time: z.string().nullable(),
+  endTime: z.string().nullable(),
   title: z.string(),
   place: z.string().nullable(),
   cost: z.number(),
@@ -154,6 +155,7 @@ const bookingBody = z.object({
 const planBody = z.object({
   day: dayKey,
   time: z.string().regex(/^\d{2}:\d{2}$/, "Use a time like 09:30").nullable().optional(),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "Use a time like 11:00").nullable().optional(),
   title: text(120),
   place: optionalText(200),
   cost: cost.optional(),
@@ -174,6 +176,11 @@ function dated<T extends Record<string, unknown>>(body: T, keys: string[]) {
   const values: Record<string, unknown> = { ...body };
   for (const key of keys) if (key in body) values[key] = toDate(body[key] as number | null | undefined);
   return values;
+}
+
+/** A plan's end has to come after its start, the same day. */
+function checkSpan(time: string | null, endTime: string | null) {
+  if (time && endTime && endTime <= time) throw new GoalError("It has to end after it starts");
 }
 
 async function checkTraveller(goalId: number, travellerId: number | null | undefined) {
@@ -341,8 +348,9 @@ export default async function (fastify: FastifyInstance) {
     const { id } = request.params as z.infer<typeof idParams>;
     const goal = await tripGoal(id);
     const body = request.body as z.infer<typeof planBody>;
+    checkSpan(body.time ?? null, body.endTime ?? null);
     const [{ next }] = await db.select({ next: sql<number>`coalesce(max(${goalPlans.sortOrder}), -1) + 1` }).from(goalPlans).where(and(eq(goalPlans.goalId, id), eq(goalPlans.day, body.day)));
-    const [created] = await db.insert(goalPlans).values({ ...body, goalId: id, sortOrder: Number(next) }).returning();
+    const [created] = await db.insert(goalPlans).values({ ...body, endTime: body.time ? body.endTime ?? null : null, goalId: id, sortOrder: Number(next) }).returning();
     return reply.code(201).send(planView(created, tripBasics(goal.typeData)));
   }));
 
@@ -350,8 +358,14 @@ export default async function (fastify: FastifyInstance) {
     schema: { operationId: "updateTripPlan", tags: ["goals"], params: idParams, body: planBody.partial().strict(), response: { 200: planSchema, 400: errorSchema, 404: errorSchema } },
   }, async (request, reply) => guarded(reply, async () => {
     const { id } = request.params as z.infer<typeof idParams>;
-    const [updated] = await db.update(goalPlans).set(request.body as Partial<z.infer<typeof planBody>>).where(eq(goalPlans.id, id)).returning();
-    if (!updated) throw new GoalError("Plan not found", 404);
+    const body = request.body as Partial<z.infer<typeof planBody>>;
+    const [existing] = await db.select().from(goalPlans).where(eq(goalPlans.id, id)).limit(1);
+    if (!existing) throw new GoalError("Plan not found", 404);
+    const time = body.time !== undefined ? body.time : existing.time;
+    // Without a time it has no end either; an end must come after the start.
+    const endTime = time === null ? null : body.endTime !== undefined ? body.endTime : existing.endTime;
+    checkSpan(time, endTime ?? null);
+    const [updated] = await db.update(goalPlans).set({ ...body, endTime }).where(eq(goalPlans.id, id)).returning();
     return planView(updated, tripBasics((await tripGoal(updated.goalId)).typeData));
   }));
 
