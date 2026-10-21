@@ -14,7 +14,7 @@ export function goalPace(goal: Pick<Goal, 'targetAmount' | 'setAside' | 'byDate'
 }
 
 /** What a goal's monthly amount still asks for this month: less what it got already, no more than it needs. */
-export function dueThisMonth(goal: Pick<Goal, 'targetAmount' | 'setAside' | 'monthlyAmount' | 'setAsideThisMonth' | 'status'>): number {
-  if (goal.status !== 'active') return 0;
+export function dueThisMonth(goal: Pick<Goal, 'targetAmount' | 'setAside' | 'monthlyAmount' | 'setAsideThisMonth' | 'status' | 'paused'>): number {
+  if (goal.status !== 'active' || goal.paused) return 0;
   return Math.max(0, Math.min(goal.monthlyAmount - goal.setAsideThisMonth, goal.targetAmount - goal.setAside));
 }

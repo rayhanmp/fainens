@@ -21,6 +21,7 @@ import {
   useCreateGoalMutation,
   useDeleteGoalMutation,
   useFundMonthlyMutation,
+  useReorderGoalsMutation,
   useGoalSettingsMutation,
   useGoalsQuery,
   useReopenGoalMutation,
@@ -58,6 +59,7 @@ function GoalsPage() {
   const reopenGoal = useReopenGoalMutation();
   const fundMonthly = useFundMonthlyMutation();
   const settings = useGoalSettingsMutation();
+  const reorder = useReorderGoalsMutation();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Goal | 'new' | null>(search.wishlistId ? 'new' : null);
   const [moving, setMoving] = useState<Goal | null>(null);
@@ -72,19 +74,21 @@ function GoalsPage() {
   const wishlist = useWishlistQuery();
 
   const overview = query.data;
+  // Six months of what you spend, to the nearest Rp1 juta: the emergency fund's suggested size.
+  const emergency = useMemo(() => Math.round(((recentSaving(summaries.data ?? [], now)?.averageSpending ?? 0) * 6) / 1_000_000) * 1_000_000, [summaries.data, now]);
   const starters = useMemo<GoalStarter[]>(() => {
     const list: GoalStarter[] = [];
-    const spending = recentSaving(summaries.data ?? [], now)?.averageSpending ?? 0;
-    const emergency = Math.round((spending * 6) / 1_000_000) * 1_000_000;
-    list.push({ key: 'emergency', label: 'Emergency fund', detail: emergency > 0 ? `6× spending, ${compactRupiah(emergency)}` : undefined, draft: { name: 'Emergency fund', kind: 'keep', targetAmount: emergency || undefined } });
+    if (!overview?.goals.some((goal) => goal.name.trim().toLowerCase() === 'emergency fund')) {
+      list.push({ key: 'emergency', label: 'Emergency fund', detail: emergency > 0 ? `6× spending, ${compactRupiah(emergency)}` : undefined, draft: { name: 'Emergency fund', icon: '🛟', kind: 'keep', targetAmount: emergency || undefined } });
+    }
     const linked = new Set(overview?.goals.map((goal) => goal.wishlistId) ?? []);
     for (const item of wishlist.data?.items ?? []) {
       if (list.length >= 3) break;
       if (item.status !== 'active' || item.amount <= 0 || linked.has(item.id)) continue;
-      list.push({ key: `wishlist-${item.id}`, label: item.name, detail: compactRupiah(item.amount), draft: { name: item.name.slice(0, 80), targetAmount: item.amount, kind: 'spend', wishlistId: item.id, byDate: item.period ? Number(item.period.endDate) : null } });
+      list.push({ key: `wishlist-${item.id}`, label: item.name, detail: compactRupiah(item.amount), draft: { name: item.name.slice(0, 80), icon: '🛍️', targetAmount: item.amount, kind: 'spend', wishlistId: item.id, byDate: item.period ? Number(item.period.endDate) : null } });
     }
     return list;
-  }, [summaries.data, wishlist.data, overview?.goals, now]);
+  }, [emergency, wishlist.data, overview?.goals]);
   const addGoal = (draft?: Partial<GoalDraft>) => {
     setInitial(draft);
     setEditing('new');
@@ -150,7 +154,7 @@ function GoalsPage() {
                 <GoalList
                   overview={overview}
                   selectedId={selectedId}
-                  onSelect={select}
+                  onReorder={(ids) => reorder.mutate(ids, { onError: (error) => toast.error(errorText(error, "Could not change the order")) })}
                   onMove={setMoving}
                   onComplete={setCompleting}
                   onEdit={setEditing}
@@ -167,6 +171,11 @@ function GoalsPage() {
                     <ThisMonthPanel
                       overview={overview}
                       funding={fundMonthly.isPending}
+                      savingAuto={settings.isPending}
+                      onAutoFund={(on) => settings.mutate({ autoFundOnPayday: on }, {
+                        onSuccess: () => toast.success(on ? 'Goals get their monthly amounts when your salary posts.' : 'Payday no longer puts money into goals.'),
+                        onError: (error) => toast.error(errorText(error, 'Could not save')),
+                      })}
                       onFund={async () => {
                         try {
                           const result = await fundMonthly.mutateAsync(null);
@@ -189,7 +198,7 @@ function GoalsPage() {
                 onToggle={async (accountId, included) => {
                   const excluded = overview.accounts.filter((account) => !account.included).map((account) => account.id);
                   try {
-                    await settings.mutateAsync(included ? excluded.filter((id) => id !== accountId) : [...excluded, accountId]);
+                    await settings.mutateAsync({ excludedAccountIds: included ? excluded.filter((id) => id !== accountId) : [...excluded, accountId] });
                   } catch (error) {
                     toast.error(errorText(error, 'Could not save'));
                   }
@@ -202,6 +211,8 @@ function GoalsPage() {
                 goal={editing === 'new' ? null : editing}
                 initial={editing === 'new' ? initial : undefined}
                 unassigned={overview.unassigned}
+                salary={overview.salary}
+                emergencyAmount={emergency}
                 busy={createGoal.isPending || updateGoal.isPending}
                 onClose={closeEditor}
                 onSave={(draft) => void saveGoal(draft)}

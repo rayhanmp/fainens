@@ -37,6 +37,7 @@ import { Route as AccountsRouteImport } from './routes/accounts'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as HelpIndexRouteImport } from './routes/help.index'
 import { Route as HelpSlugRouteImport } from './routes/help.$slug'
+import { Route as GoalsGoalIdRouteImport } from './routes/goals_.$goalId'
 
 const WishlistRoute = WishlistRouteImport.update({
   id: '/wishlist',
@@ -178,6 +179,11 @@ const HelpSlugRoute = HelpSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => HelpRoute,
 } as any)
+const GoalsGoalIdRoute = GoalsGoalIdRouteImport.update({
+  id: '/goals_/$goalId',
+  path: '/goals/$goalId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -206,6 +212,7 @@ export interface FileRoutesByFullPath {
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
   '/wishlist': typeof WishlistRoute
+  '/goals/$goalId': typeof GoalsGoalIdRoute
   '/help/$slug': typeof HelpSlugRoute
   '/help/': typeof HelpIndexRoute
 }
@@ -235,6 +242,7 @@ export interface FileRoutesByTo {
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
   '/wishlist': typeof WishlistRoute
+  '/goals/$goalId': typeof GoalsGoalIdRoute
   '/help/$slug': typeof HelpSlugRoute
   '/help': typeof HelpIndexRoute
 }
@@ -266,6 +274,7 @@ export interface FileRoutesById {
   '/subscriptions': typeof SubscriptionsRoute
   '/transactions': typeof TransactionsRoute
   '/wishlist': typeof WishlistRoute
+  '/goals_/$goalId': typeof GoalsGoalIdRoute
   '/help/$slug': typeof HelpSlugRoute
   '/help/': typeof HelpIndexRoute
 }
@@ -298,6 +307,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/transactions'
     | '/wishlist'
+    | '/goals/$goalId'
     | '/help/$slug'
     | '/help/'
   fileRoutesByTo: FileRoutesByTo
@@ -327,6 +337,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/transactions'
     | '/wishlist'
+    | '/goals/$goalId'
     | '/help/$slug'
     | '/help'
   id:
@@ -357,6 +368,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/transactions'
     | '/wishlist'
+    | '/goals_/$goalId'
     | '/help/$slug'
     | '/help/'
   fileRoutesById: FileRoutesById
@@ -388,6 +400,7 @@ export interface RootRouteChildren {
   SubscriptionsRoute: typeof SubscriptionsRoute
   TransactionsRoute: typeof TransactionsRoute
   WishlistRoute: typeof WishlistRoute
+  GoalsGoalIdRoute: typeof GoalsGoalIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -588,6 +601,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HelpSlugRouteImport
       parentRoute: typeof HelpRoute
     }
+    '/goals_/$goalId': {
+      id: '/goals_/$goalId'
+      path: '/goals/$goalId'
+      fullPath: '/goals/$goalId'
+      preLoaderRoute: typeof GoalsGoalIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -630,6 +650,7 @@ const rootRouteChildren: RootRouteChildren = {
   SubscriptionsRoute: SubscriptionsRoute,
   TransactionsRoute: TransactionsRoute,
   WishlistRoute: WishlistRoute,
+  GoalsGoalIdRoute: GoalsGoalIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

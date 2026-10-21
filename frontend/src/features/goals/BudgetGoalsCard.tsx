@@ -22,7 +22,7 @@ export function BudgetGoalsCard({ savingsTarget, canFund }: {
   const fund = useFundMonthlyMutation();
   const overview = query.data;
   const active = (overview?.goals ?? []).filter((goal) => goal.status === 'active');
-  const monthly = active.reduce((sum, goal) => sum + goal.monthlyAmount, 0);
+  const monthly = active.reduce((sum, goal) => sum + (goal.paused ? 0 : goal.monthlyAmount), 0);
   const due = active.reduce((sum, goal) => sum + dueThisMonth(goal), 0);
   const fundable = Math.min(due, Math.max(0, overview?.unassigned ?? 0));
   const shown = [...active].sort((a, b) => (a.byDate ?? Infinity) - (b.byDate ?? Infinity) || b.monthlyAmount - a.monthlyAmount).slice(0, 4);

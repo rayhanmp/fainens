@@ -35,7 +35,11 @@ const SAMPLE_PLAN: PlanInputs = {
   goals: [{ id: 'sample-house', name: 'House down payment', amount: 100_000_000, byMonth: 84, potId: 'sample-sbn', spend: false, saved: 0 }],
 };
 
-const sampleGoal = { byDate: null, kind: 'keep' as const, status: 'active' as const, wishlistId: null, spentTransactionId: null, doneAt: null, setAsideThisMonth: 0 };
+const sampleGoal = {
+  byDate: null, kind: 'keep' as const, status: 'active' as const, wishlistId: null, spentTransactionId: null, doneAt: null, setAsideThisMonth: 0,
+  monthlyPercent: null, paused: false, icon: null, description: null, linkUrl: null, linkTitle: null, linkImage: null, accountId: null,
+  expectedReturn: 0, recurrence: 'none' as const, categoryId: null, categorySince: null, reachMonths: null, coverAttachmentId: null,
+};
 
 /** Rp45 juta in three accounts, Rp29 juta of it in an emergency fund and a laptop. */
 const SAMPLE_GOALS: GoalsOverview = {
@@ -48,10 +52,12 @@ const SAMPLE_GOALS: GoalsOverview = {
     { id: 3, name: 'Bibit', liquidityClass: 'investment', balance: 15_000_000, included: true },
   ],
   goals: [
-    { ...sampleGoal, id: 1, name: 'Emergency fund', targetAmount: 30_000_000, monthlyAmount: 1_000_000, sortOrder: 0, setAside: 24_000_000, setAsideThisMonth: 1_000_000 },
-    { ...sampleGoal, id: 2, name: 'Laptop', targetAmount: 18_000_000, kind: 'spend', byDate: new Date(2027, 5, 30).getTime(), monthlyAmount: 1_500_000, sortOrder: 1, setAside: 5_000_000 },
-    { ...sampleGoal, id: 3, name: 'Japan trip', targetAmount: 25_000_000, kind: 'spend', monthlyAmount: 0, sortOrder: 2, setAside: 0 },
+    { ...sampleGoal, id: 1, name: 'Emergency fund', icon: '🛟', targetAmount: 30_000_000, monthlyAmount: 1_000_000, sortOrder: 0, setAside: 24_000_000, setAsideThisMonth: 1_000_000, reachMonths: 6 },
+    { ...sampleGoal, id: 2, name: 'Laptop', icon: '💻', targetAmount: 18_000_000, kind: 'spend', byDate: new Date(2027, 5, 30).getTime(), monthlyAmount: 1_500_000, sortOrder: 1, setAside: 5_000_000, reachMonths: 9 },
+    { ...sampleGoal, id: 3, name: 'Japan trip', icon: '✈️', targetAmount: 25_000_000, kind: 'spend', monthlyAmount: 0, sortOrder: 2, setAside: 0 },
   ],
+  salary: null,
+  autoFundOnPayday: false,
 };
 
 /** The Goals page’s own top card, drawn from sample goals; pick a goal in the bar to select it. */

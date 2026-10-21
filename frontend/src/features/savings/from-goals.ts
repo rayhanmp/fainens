@@ -1,6 +1,9 @@
 import { DEFAULT_PLAN, DEFAULT_POT, MAX_POTS, planMonthOf, type PlanGoal, type PlanInputs, type PlanPot } from './plan.ts';
 
-type RealGoal = { id: number; name: string; targetAmount: number; byDate: number | null; kind: 'spend' | 'keep'; monthlyAmount: number; status: string; setAside: number };
+type RealGoal = { id: number; name: string; targetAmount: number; byDate: number | null; kind: 'spend' | 'keep'; monthlyAmount: number; status: string; setAside: number; paused?: boolean; expectedReturn?: number };
+
+/** What a goal puts in each month in the plan: nothing while it's paused. */
+const monthlyOf = (goal: RealGoal) => (goal.paused ? 0 : goal.monthlyAmount);
 
 /**
  * A simulator plan that starts from your real goals. Each goal is its own pot, holding what's in it
@@ -15,14 +18,14 @@ export function planFromGoals(real: { goals: RealGoal[]; unassigned: number }, a
   const others = active.slice(room);
   const potOf = (goal: RealGoal) => (own.includes(goal) ? `goal-pot-${goal.id}` : 'other-goals');
   const sum = (goals: RealGoal[], pick: (goal: RealGoal) => number) => goals.reduce((total, goal) => total + pick(goal), 0);
-  const pots: PlanPot[] = own.map((goal) => ({ ...DEFAULT_POT, id: potOf(goal), name: goal.name.slice(0, 80), start: goal.setAside, monthly: goal.monthlyAmount }));
-  if (others.length) pots.push({ ...DEFAULT_POT, id: 'other-goals', name: 'Other goals', start: sum(others, (goal) => goal.setAside), monthly: sum(others, (goal) => goal.monthlyAmount) });
+  const pots: PlanPot[] = own.map((goal) => ({ ...DEFAULT_POT, id: potOf(goal), name: goal.name.slice(0, 80), start: goal.setAside, monthly: monthlyOf(goal), returnRate: goal.expectedReturn || DEFAULT_POT.returnRate }));
+  if (others.length) pots.push({ ...DEFAULT_POT, id: 'other-goals', name: 'Other goals', start: sum(others, (goal) => goal.setAside), monthly: sum(others, monthlyOf) });
   pots.push({
     ...DEFAULT_POT,
     id: 'unassigned',
     name: 'Free money',
     start: Math.max(0, Math.round(real.unassigned)),
-    monthly: Math.max(0, Math.round((averageSaving - sum(active, (goal) => goal.monthlyAmount)) / 10_000) * 10_000),
+    monthly: Math.max(0, Math.round((averageSaving - sum(active, monthlyOf)) / 10_000) * 10_000),
   });
   const goals: PlanGoal[] = active.map((goal) => ({
     id: `goal-${goal.id}`,

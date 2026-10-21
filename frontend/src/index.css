@@ -1310,6 +1310,37 @@ button[data-variant="danger"]:focus-visible,
     radial-gradient(120% 80% at 85% 0%, color-mix(in srgb, white 18%, transparent), transparent 60%),
     linear-gradient(160deg, color-mix(in srgb, var(--color-accent) 88%, white), var(--color-accent) 45%, color-mix(in srgb, var(--color-accent) 70%, #0b1b3a));
 }
+/* A goal reaching a quarter of its target: confetti from the middle, then the words. */
+.goal-confetti {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--c);
+  opacity: 0;
+  animation: goal-confetti 1400ms cubic-bezier(.2, .7, .3, 1) forwards;
+}
+.goal-confetti-dot { width: 8px; height: 8px; border-radius: 999px; }
+@keyframes goal-confetti {
+  0% { opacity: 1; transform: translate(-50%, -50%) rotate(0); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y) + 60px)) rotate(var(--spin)); }
+}
+.goal-celebration-words { animation: goal-words 2600ms ease-out forwards; }
+@keyframes goal-words {
+  0% { opacity: 0; transform: scale(.7); }
+  12% { opacity: 1; transform: scale(1.05); }
+  20% { transform: scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .goal-confetti { display: none; }
+  .goal-celebration-words { animation: none; }
+}
+
 /* Retirement: a clear, bright sky over a garden, the same blue lightening toward the hills. */
 .garden-sky {
   background:

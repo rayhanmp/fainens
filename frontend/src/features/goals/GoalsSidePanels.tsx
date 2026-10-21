@@ -2,6 +2,7 @@ import { Check, Sparkles } from 'lucide-react';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
 import { cn } from '../../lib/utils';
 import { InfoHint } from '../savings/InfoHint';
+import { Toggle } from '../settings/controls';
 import { Section } from '../subscriptions/PageParts';
 import { coloredGoals } from './colors';
 import { dueThisMonth, monthsUntil } from './pace';
@@ -14,10 +15,17 @@ const addMonths = (months: number, now = new Date()) => new Date(now.getFullYear
  * This month's plan: what each goal's monthly amount asks, what it already got, and one button
  * that puts in the rest from your free money.
  */
-export function ThisMonthPanel({ overview, funding, onFund }: { overview: GoalsOverview; funding: boolean; onFund: () => void }) {
+export function ThisMonthPanel({ overview, funding, onFund, onAutoFund, savingAuto = false }: {
+  overview: GoalsOverview;
+  funding: boolean;
+  onFund: () => void;
+  /** Switches putting in every goal's monthly amount when your salary posts. */
+  onAutoFund?: (on: boolean) => void;
+  savingAuto?: boolean;
+}) {
   const { formatAmount } = useBalanceVisibility();
   const month = new Date().toLocaleDateString('en-US', { month: 'long' });
-  const goals = coloredGoals(overview.goals).filter(({ goal }) => goal.monthlyAmount > 0);
+  const goals = coloredGoals(overview.goals).filter(({ goal }) => goal.monthlyAmount > 0 && !goal.paused);
   const due = goals.reduce((sum, { goal }) => sum + dueThisMonth(goal), 0);
   const fundable = Math.min(due, Math.max(0, overview.unassigned));
 
@@ -65,12 +73,21 @@ export function ThisMonthPanel({ overview, funding, onFund }: { overview: GoalsO
                   <Sparkles className="h-3.5 w-3.5" aria-hidden />Put in {formatAmount(fundable > 0 ? fundable : due)}
                 </button>
                 <p className="mt-1.5 text-[11px] text-[var(--ref-on-surface-variant)]">
-                  {fundable <= 0 ? 'Nothing is free to put in right now.' : fundable < due ? `Only ${formatAmount(fundable)} is free; dated goals get theirs first.` : 'From your free money. Nothing moves between accounts.'}
+                  {fundable <= 0 ? 'Nothing is free to put in right now.' : fundable < due ? `Only ${formatAmount(fundable)} is free; goals higher in the list get theirs first.` : 'From your free money. Nothing moves between accounts.'}
                 </p>
               </>
             )}
           </div>
         </>
+      )}
+      {onAutoFund && (
+        <label className="flex items-start justify-between gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:px-5">
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-[var(--ref-on-surface)]">Put in on payday</span>
+            <span className="block text-xs text-[var(--ref-on-surface-variant)]">{overview.salary ? 'When your salary posts, every goal gets its monthly amount, top of the list first.' : 'Set up your salary in Income & salary, then every goal gets its monthly amount when it posts.'}</span>
+          </span>
+          <Toggle label="Put in on payday" checked={overview.autoFundOnPayday} disabled={savingAuto} onChange={onAutoFund} />
+        </label>
       )}
     </Section>
   );
@@ -78,13 +95,12 @@ export function ThisMonthPanel({ overview, funding, onFund }: { overview: GoalsO
 
 /**
  * When each goal gets there at its monthly amount, drawn as a line from today, with a tick where
- * it's needed by. Interest isn't counted, so it errs on the late side.
+ * it's needed by. What each goal earns where its money sits is counted; a paused goal never gets there.
  */
 export function ReachPanel({ overview }: { overview: GoalsOverview }) {
   const now = new Date();
   const rows = coloredGoals(overview.goals).map(({ goal, color }) => {
-    const toGo = Math.max(0, goal.targetAmount - goal.setAside);
-    const months = toGo === 0 ? 0 : goal.monthlyAmount > 0 ? Math.ceil(toGo / goal.monthlyAmount) : null;
+    const months = goal.reachMonths;
     const by = goal.byDate ? monthsUntil(goal.byDate, now) : null;
     return { goal, color, months, by };
   });
@@ -95,7 +111,7 @@ export function ReachPanel({ overview }: { overview: GoalsOverview }) {
   return (
     <Section
       title="When you’ll get there"
-      aside={<InfoHint label="How this is worked out" align="right">From what’s in each goal now, adding its monthly amount every month. Interest isn’t counted, so goals in savings or SBN may get there a little sooner. A tick marks the month a goal is needed by.</InfoHint>}
+      aside={<InfoHint label="How this is worked out" align="right">From what’s in each goal now, adding its monthly amount every month and what it earns where its money sits. A tick marks the month a goal is needed by.</InfoHint>}
     >
       <ul className="space-y-4 px-4 py-4 sm:px-5">
         {rows.map(({ goal, color, months, by }) => {
@@ -105,7 +121,7 @@ export function ReachPanel({ overview }: { overview: GoalsOverview }) {
               <div className="flex items-baseline justify-between gap-3 text-sm">
                 <span className="truncate text-[var(--ref-on-surface)]">{goal.name}</span>
                 <span className={cn('shrink-0 text-xs tabular-nums', months === 0 ? 'font-semibold text-[var(--color-success)]' : late ? 'text-[var(--color-warning)]' : 'text-[var(--ref-on-surface-variant)]')}>
-                  {months === 0 ? 'There already' : months === null ? 'No monthly amount' : monthYear(addMonths(months, now))}
+                  {months === 0 ? 'There already' : months === null ? (goal.paused ? 'Paused' : goal.monthlyAmount > 0 ? 'Not within 50 years' : 'No monthly amount') : monthYear(addMonths(months, now))}
                 </span>
               </div>
               {/* The track: from today to the month it's reached; a tick where it's needed by. */}

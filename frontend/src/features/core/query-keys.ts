@@ -34,7 +34,7 @@ export const queryKeys = {
   split: { all: ["split-bill"] as const },
   wishlist: { all: ["wishlist"] as const },
   savings: { plans: ["savings", "plans"] as const },
-  goals: { all: ["goals"] as const, allocations: (id: number) => ["goals", "allocations", id] as const },
+  goals: { all: ["goals"] as const, allocations: (id: number) => ["goals", "allocations", id] as const, detail: (id: number) => ["goals", "detail", id] as const },
   profile: ["profile"] as const,
   attachments: { all: ["attachments"] as const, transaction: (transactionId: number | null) => ["attachments", "transaction", transactionId] as const, download: (id: number) => ["attachments", "download", id] as const },
   gallery: { all: ["gallery"] as const, images: (source: string, search: string) => ["gallery", "images", source, search] as const },
