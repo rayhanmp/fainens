@@ -13847,6 +13847,11 @@ export type GetReportTrendsParams = {
  * @maximum 24
  */
 periodCount?: number;
+/**
+ * @maximum 9007199254740991
+ * @exclusiveMinimum
+ */
+untilPeriodId?: number;
 };
 
 export type GetReportTrends200ItemCoverage = {

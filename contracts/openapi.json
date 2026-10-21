@@ -29489,6 +29489,16 @@
             "in": "query",
             "name": "periodCount",
             "required": false
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "untilPeriodId",
+            "required": false
           }
         ],
         "responses": {

@@ -51,10 +51,11 @@ export function useSpendingQuery(periodId?: number) {
   });
 }
 
-export function useTrendsQuery(periodCount = 6) {
+/** The last `periodCount` periods up to `untilPeriodId` (the one picked on Reports), or up to today. */
+export function useTrendsQuery(periodCount = 6, untilPeriodId?: number) {
   return useQuery({
-    queryKey: [...queryKeys.reports.trends, periodCount] as const,
-    queryFn: ({ signal }) => unwrapGenerated(getReportTrends({ periodCount }, { signal }), 200, 'Failed to load report trends'),
+    queryKey: [...queryKeys.reports.trends, periodCount, untilPeriodId ?? null] as const,
+    queryFn: ({ signal }) => unwrapGenerated(getReportTrends({ periodCount, ...(untilPeriodId != null ? { untilPeriodId } : {}) }, { signal }), 200, 'Failed to load report trends'),
     placeholderData: (previous) => previous,
   });
 }

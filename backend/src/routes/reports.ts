@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, lte } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
@@ -129,7 +129,7 @@ const monthlyReportSchema = z.object({
 }).passthrough();
 const trendRowSchema = z.object({ periodId: z.number().int(), periodName: z.string(), startDate: z.number(), endDate: z.number(), revenue: z.number(), expenses: z.number(), netIncome: z.number(), generatedAt: z.number().int().nonnegative().optional(), isTemporary: z.boolean().optional(), coverage: reportCoverageSchema.optional() }).passthrough();
 const reportTypeParamsSchema = z.object({ reportType: z.enum(["income-statement", "balance-sheet", "cash-flow"]) });
-const trendQuerySchema = z.object({ periodCount: z.coerce.number().int().min(1).max(24).optional() });
+const trendQuerySchema = z.object({ periodCount: z.coerce.number().int().min(1).max(24).optional(), untilPeriodId: z.coerce.number().int().positive().optional() });
 const reportExportQuerySchema = periodQuerySchema.extend({ asOfDate: z.coerce.number().int().nonnegative().optional() });
 
 /** A period's endDate is the start of its last local day; reports run through the end of that day. */
@@ -384,11 +384,16 @@ export default async function (fastify: FastifyInstance) {
     schema: { operationId: "getReportTrends", tags: ["reports"], querystring: trendQuerySchema, response: { 200: z.array(trendRowSchema), 400: reportErrorSchema, 500: reportErrorSchema } },
   }, async (request, reply) => {
     try {
-      const { periodCount = 6 } = z.object({
-        periodCount: z.coerce.number().int().min(1).max(24).optional(),
-      }).parse(request.query);
+      const { periodCount = 6, untilPeriodId } = trendQuerySchema.parse(request.query);
 
-      // Get recent periods
+      // The periods up to the one picked (or up to today), leaving out archived ones and any not
+      // started yet, newest first.
+      let until = Date.now();
+      if (untilPeriodId != null) {
+        const [picked] = await db.select({ startDate: salaryPeriods.startDate }).from(salaryPeriods).where(eq(salaryPeriods.id, untilPeriodId)).limit(1);
+        if (!picked) return reply.code(400).send({ error: "That period doesn't exist" });
+        until = picked.startDate;
+      }
       const periods = await db
         .select({
           id: salaryPeriods.id,
@@ -397,6 +402,7 @@ export default async function (fastify: FastifyInstance) {
           endDate: salaryPeriods.endDate,
         })
         .from(salaryPeriods)
+        .where(and(eq(salaryPeriods.isActive, true), isNull(salaryPeriods.archivedAt), lte(salaryPeriods.startDate, until)))
         .orderBy(desc(salaryPeriods.startDate))
         .limit(periodCount);
 

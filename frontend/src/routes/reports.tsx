@@ -332,7 +332,7 @@ function ReportsPage() {
           {activeTab === 'spending' && (
             <SpendingReport periodId={effectivePeriodId ? parseInt(effectivePeriodId) : undefined} />
           )}
-          {activeTab === 'trends' && <TrendsReport />}
+          {activeTab === 'trends' && <TrendsReport periodId={effectivePeriodId ? parseInt(effectivePeriodId) : undefined} />}
         </div>
       </PageContainer>
     </RequireAuth>
@@ -962,9 +962,10 @@ export function SpendingReport({ periodId }: { periodId?: number }) {
 }
 
 // Trends Report
-export function TrendsReport() {
+/** The six periods up to the one picked at the top of Reports. */
+export function TrendsReport({ periodId }: { periodId?: number }) {
   const { formatAmount, maskAmounts } = useBalanceVisibility();
-  const query = useTrendsQuery(6);
+  const query = useTrendsQuery(6, periodId);
   const data = query.data ?? null;
   const isLoading = query.isPending && !query.data;
 
