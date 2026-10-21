@@ -1,5 +1,5 @@
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useImportTransactions, usePreviewTransactionImportMutation } from '../../features/transactions/queries';
@@ -87,6 +87,7 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess, draftBatchId = null
   const previewImportMutation = usePreviewTransactionImportMutation();
   const [step, setStep] = useState<'upload' | 'preview' | 'result'>('upload');
   const [csvText, setCsvText] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
@@ -317,17 +318,17 @@ export function ImportCSVModal({ isOpen, onClose, onSuccess, draftBatchId = null
           or click to browse
         </p>
         <input
+          ref={fileInputRef}
           type="file"
-          accept=".csv"
+          accept=".csv,text/csv"
           onChange={handleFileSelect}
           className="hidden"
           id="csv-upload"
         />
-        <label htmlFor="csv-upload">
-          <Button variant="secondary" className="cursor-pointer">
-            Choose File
-          </Button>
-        </label>
+        {/* A button inside a <label> doesn't open the picker, so it opens the input itself. */}
+        <Button type="button" variant="secondary" onClick={() => fileInputRef.current?.click()}>
+          Choose File
+        </Button>
       </div>
 
       {csvText && (
