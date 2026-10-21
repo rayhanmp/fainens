@@ -16,7 +16,7 @@ export const CAN_I: CanIAnswer[] = [
   { question: 'Use it in Bahasa Indonesia?', answer: 'partly', detail: 'Agent can reply in Bahasa Indonesia; the app itself is in English.' },
   { question: 'Track other currencies?', answer: 'partly', detail: 'Everything is counted in whole rupiah. A holiday’s bookings and plans can be priced in the local money at your rate, and Agent can look up exchange rates for reference.' },
   { question: 'Delete a posted transaction?', answer: 'no', detail: 'Correct it instead; the history keeps both entries.' },
-  { question: 'Restore a backup in the app?', answer: 'no', detail: 'Backups and exports are kept safe, but restoring isn’t built in yet.' },
+  { question: 'Restore a backup in the app?', answer: 'yes', detail: 'From a saved cloud backup or a backup file, in Settings → Backups. Your data as it is now is backed up first.' },
   { question: 'Share it with someone else?', answer: 'no', detail: 'It’s single-user; loans and split bills track people without giving them access.' },
 ];
 
