@@ -5,9 +5,9 @@ import { AgentOrbActions } from '../components/ui/AgentOrbActions';
 import { PageContainer } from '../components/ui/PageContainer';
 import { PeriodPicker } from '../components/ui/PeriodPicker';
 import { RequireAuth, useAuth } from '../lib/auth';
-import { api, type AgentFinancialFacts, type BudgetPlan, type BudgetSummary } from '../lib/api';
+import { api, type AgentFinancialFacts, type BudgetSummary } from '../lib/api';
 import { fetchOnboardingStatus } from '../lib/onboarding-status';
-import { findCurrentPeriod, formatCurrency, formatDateTime, formatDayMonth, formatTime } from '../lib/utils';
+import { findCurrentPeriod, formatDateTime, formatTime } from '../lib/utils';
 import { NetWorthChart, SpendingTrendChart } from '../components/analytics';
 import { TransactionModal } from '../components/transactions/TransactionModal';
 // The report modal pulls in the PDF engine; load it only when the report is opened.
@@ -32,9 +32,7 @@ import { useNetWorthTrendQuery } from '../features/analytics/queries';
 import { useAgentProfileQuery, useFinancialFactsQuery } from '../features/agent/queries';
 import { usePendingTransactionsQuery } from '../features/transactions/queries';
 import { useGoalsQuery } from '../features/goals/queries';
-import { useGoalDueTasksQuery } from '../features/goals/notes/queries';
-import { useGoalRemindersQuery } from '../features/goals/trip/queries';
-import { useAverageSpending } from '../features/goals/use-headline';
+import { budgetPlansFromPayload, useAttentionItems } from '../features/dashboard/use-attention-items';
 import { GoalsDashboardPanel } from '../features/dashboard/GoalsDashboardPanel';
 import { useUiStore } from '../stores/ui-store';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
@@ -48,7 +46,7 @@ import { monthlySubscriptionCost, spentThroughDay, type PulseInputs, type PulseM
 import { BudgetPanel } from '../features/dashboard/BudgetPanel';
 import { ActivityPanel } from '../features/dashboard/ActivityPanel';
 import { PaymentsPanel } from '../features/dashboard/PaymentsPanel';
-import { buildAttentionItems, goalReminders, isTrackedCoverage } from '../features/dashboard/attention';
+import { isTrackedCoverage } from '../features/dashboard/attention';
 import { budgetUsedRatio, periodPacing } from '../features/dashboard/pacing';
 import { upcomingCommitments } from '../features/dashboard/commitments';
 import { fallbackName, heroCopy, percentChange, timeOfDayGreeting } from '../features/dashboard/hero-copy';
@@ -77,7 +75,6 @@ type Category = Awaited<ReturnType<typeof api.categories.list>>[number];
 type Tag = Awaited<ReturnType<typeof api.tags.list>>[number];
 type DashboardAnalytics = Awaited<ReturnType<typeof api.analytics.dashboard>>;
 type Facts = AgentFinancialFacts['data'];
-type ReconciliationHistory = Awaited<ReturnType<typeof api.accounts.reconciliationHistory>>;
 type Loan = Awaited<ReturnType<typeof api.loans.list>>[number];
 type PayLaterObligations = Awaited<ReturnType<typeof api.paylater.obligations>>;
 type SubscriptionData = Awaited<ReturnType<typeof api.subscriptions.list>>;
@@ -85,11 +82,6 @@ type SubscriptionData = Awaited<ReturnType<typeof api.subscriptions.list>>;
 /** "Today, 17:04" for the live position; otherwise the full date and time in the user's format. */
 function formatAsOf(timestamp: number, now: number): string {
   return new Date(timestamp).toDateString() === new Date(now).toDateString() ? `Today, ${formatTime(timestamp)}` : formatDateTime(timestamp);
-}
-
-function budgetPlansFromPayload(payload: BudgetSummary | BudgetSummary[] | undefined): BudgetPlan[] {
-  const summary = Array.isArray(payload) ? payload[0] : payload;
-  return Array.isArray(summary?.plans) ? summary.plans : [];
 }
 
 function DashboardPage() {
@@ -134,7 +126,6 @@ function DashboardPage() {
   const categories = (categoriesQuery.data ?? []) as Category[];
   const tags = (tagsQuery.data ?? []) as Tag[];
   const analytics = (analyticsQuery.data ?? null) as DashboardAnalytics | null;
-  const reconciliation = (reconciliationQuery.data ?? null) as ReconciliationHistory | null;
   const loans = useMemo(() => (loansQuery.data ?? []) as Loan[], [loansQuery.data]);
   const paylater = (paylaterQuery.data ?? null) as PayLaterObligations | null;
   const subscriptions = (subscriptionsQuery.data ?? null) as SubscriptionData | null;
@@ -184,8 +175,6 @@ function DashboardPage() {
 
   // Notifications always describe the current period, whichever period is being browsed.
   const currentPeriodQueries = useDashboardPeriodQueries(currentPeriod?.id ?? null);
-  const currentFacts = (currentPeriodQueries.facts.data?.data ?? null) as Facts | null;
-  const currentBudgetRows = useMemo(() => budgetPlansFromPayload(currentPeriodQueries.budget.data as BudgetSummary | BudgetSummary[] | undefined), [currentPeriodQueries.budget.data]);
   const currentOutlook = currentPeriodQueries.outlook.data?.periodId === currentPeriod?.id ? currentPeriodQueries.outlook.data ?? null : null;
 
   const periodQueries = useDashboardPeriodQueries(selectedPeriod?.id ?? null);
@@ -221,26 +210,9 @@ function DashboardPage() {
     loans,
   }, dashboardNow), [dashboardNow, loans, paylater, subscriptions]);
 
-  // Goals feed the bell (what to put in, goals running late) and the pulse strip.
+  // Goals feed the pulse strip; the bell's items are worked out with the badge's (one place for both).
   const goalsQuery = useGoalsQuery();
-  const goalTasksQuery = useGoalDueTasksQuery();
-  const goalRemindersQuery = useGoalRemindersQuery();
-  const averageSpending = useAverageSpending();
-  const attentionItems = useMemo(() => buildAttentionItems({
-    now: dashboardNow,
-    pendingTransactionCount,
-    ledgerBalanced: analytics ? analytics.trialBalance.isBalanced : null,
-    currentPeriod,
-    budgetRows: currentBudgetRows,
-    outlookCategories: currentOutlook?.categories ?? [],
-    unallocatedSpentCents: currentFacts?.facts.byCategory.find((row) => row.categoryId == null && row.spentCents > 0)?.spentCents ?? null,
-    reconciliationSessions: reconciliation?.sessions ?? null,
-    loans,
-    payLaterObligations: paylater?.obligations ?? [],
-    subscriptionRenewals: subscriptions?.renewalPreview.occurrences ?? [],
-    commitments,
-    goals: goalsQuery.data ? { ...goalReminders(goalsQuery.data, dashboardNow, averageSpending), tasks: goalTasksQuery.data ?? [], kinds: goalRemindersQuery.data ?? [] } : null,
-  }, { amount: formatCurrency, date: formatDayMonth }), [analytics, averageSpending, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, dashboardNow, goalsQuery.data, goalTasksQuery.data, goalRemindersQuery.data, loans, paylater, pendingTransactionCount, reconciliation, subscriptions]);
+  const attentionItems = useAttentionItems(dashboardNow);
   // One read state for the bell and the inline strip, so marking an item read clears it from both.
   const attentionReadState = useAttentionReadState(attentionItems, user?.email);
 
