@@ -51,7 +51,8 @@ function TripStrip({ trip, now, onEdit, onPeople }: { trip: Trip; now: number; o
   const symbol = CURRENCIES.find((item) => item.code === basics.currency)?.symbol;
   const when = phase === 'before' ? `in ${daysBetween(now, basics.startDate!)} days` : phase === 'during' ? `day ${daysBetween(basics.startDate!, now) + 1} of ${days || '?'}` : phase === 'after' ? 'back home' : null;
   return (
-    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 sm:px-5">
+    <div className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 sm:px-5">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-2">
       <Fact icon={MapPin} empty="Add where you’re going" onEdit={onEdit}>{basics.places.length ? <span className="truncate font-semibold text-[var(--ref-on-surface)]">{basics.places.join(' → ')}</span> : undefined}</Fact>
       <Fact icon={CalendarDays} empty="Add dates" onEdit={onEdit}>
         {basics.startDate !== null ? (
@@ -66,7 +67,8 @@ function TripStrip({ trip, now, onEdit, onPeople }: { trip: Trip; now: number; o
         {basics.currency ? <span className="text-[var(--ref-on-surface)]">{basics.currency}{basics.rate ? <span className="text-[var(--ref-on-surface-variant)]"> · Rp{basics.rate.toLocaleString('id-ID')} for {symbol ?? basics.currency}1</span> : <span className="text-[var(--color-warning)]"> · no rate yet</span>}</span> : undefined}
       </Fact>
       <Fact icon={Users} empty="Add who’s going" onEdit={onPeople}>{trip.travellers.length ? <span className="text-[var(--ref-on-surface)]">{trip.travellers.map((traveller) => traveller.name).join(', ')}</span> : undefined}</Fact>
-      <Button type="button" size="sm" variant="secondary" className="ml-auto" onClick={onEdit}><Pencil className="mr-1.5 inline h-3.5 w-3.5" aria-hidden />Edit trip</Button>
+      </div>
+      <Button type="button" size="sm" variant="secondary" className="shrink-0 self-start sm:self-center" onClick={onEdit} aria-label="Edit trip"><Pencil className="inline h-3.5 w-3.5 sm:mr-1.5" aria-hidden /><span className="hidden sm:inline">Edit trip</span></Button>
     </div>
   );
 }
