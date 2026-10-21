@@ -58,9 +58,10 @@ export function NewLoanModal({ isOpen, onClose, onSuccess }: NewLoanModalProps) 
     walletAccountId: '',
   });
 
-  const contacts = useMemo(() => (contactsQuery.data ?? []).map((contact, i) => ({
+  // Each contact's own relationship, as saved with it; none shows as "Contact".
+  const contacts = useMemo(() => (contactsQuery.data ?? []).map((contact) => ({
     ...contact,
-    relationship: ['Close Friend', 'Family member', 'Colleague', 'Friend'][i % 4],
+    relationship: RELATIONSHIP_TYPES.find((type) => type.value === contact.relationshipType)?.label ?? null,
   })), [contactsQuery.data]);
   const accounts = useMemo(
     () => (accountsQuery.data ?? [])
