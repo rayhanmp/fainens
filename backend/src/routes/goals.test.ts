@@ -148,4 +148,84 @@ describe("goals", () => {
     expect((await get()).setAside).toBe(0);
     expect((await app.inject({ method: "PUT", url: "/api/goals/settings", payload: { excludedAccountIds: [9] } })).statusCode).toBe(400);
   });
+
+  const patch = (url: string, payload: unknown) => app.inject({ method: "PATCH", url, payload: payload as any });
+
+  it("keeps a goal's notes, icon, link, account, return and breakdown, and shows them on its page", async () => {
+    const trip = (await post("/api/goals", {
+      name: "Japan", targetAmount: 25_000_000, icon: "✈️", description: "- [ ] Book flights", linkUrl: "https://example.com/tour",
+      accountId: 1, expectedReturn: 4, monthlyAmount: 1_000_000, setAside: 5_000_000,
+    })).json();
+    expect(trip).toMatchObject({ icon: "✈️", description: "- [ ] Book flights", accountId: 1, expectedReturn: 4, reachMonths: 20 });
+    expect((await post("/api/goals", { name: "Bad", targetAmount: 1, accountId: 9 })).statusCode).toBe(400);
+    expect((await post("/api/goals", { name: "Bad", targetAmount: 1, linkUrl: "javascript:alert(1)" })).statusCode).toBe(400);
+
+    const flights = (await post(`/api/goals/${trip.id}/parts`, { name: "Flights", amount: 9_000_000 })).json();
+    await post(`/api/goals/${trip.id}/parts`, { name: "Hotel", amount: 10_000_000 });
+    // Paying the flights from the goal ticks them off and takes their cost out of it.
+    const paid = (await post(`/api/goals/${trip.id}/spend`, { amount: 4_000_000, partId: flights.id, transactionId: 2 })).json();
+    expect(paid.setAside).toBe(1_000_000);
+    expect((await post(`/api/goals/${trip.id}/spend`, { amount: 2_000_000 })).statusCode).toBe(409);
+
+    const detail = (await app.inject({ method: "GET", url: `/api/goals/${trip.id}` })).json();
+    expect(detail.parts.map((part: { name: string; paidAt: number | null }) => [part.name, part.paidAt !== null])).toEqual([["Flights", true], ["Hotel", false]]);
+    expect(detail.account).toMatchObject({ name: "BNI", balance: 40_000_000, goalsHold: 1_000_000 });
+    expect(detail.milestones.map((item: { share: number }) => item.share)).toEqual([]);
+    expect(detail.goal.status).toBe("active");
+    const history = (await app.inject({ method: "GET", url: `/api/goals/${trip.id}/allocations` })).json();
+    expect(history[0]).toMatchObject({ amount: -4_000_000, kind: "spend", note: "Paid: Flights", partId: flights.id });
+  });
+
+  it("puts money in by priority, skipping paused goals, and on payday when that's on", async () => {
+    const first = (await post("/api/goals", { name: "First", targetAmount: 50_000_000, monthlyAmount: 30_000_000 })).json();
+    const second = (await post("/api/goals", { name: "Second", targetAmount: 50_000_000, monthlyAmount: 30_000_000 })).json();
+    const paused = (await post("/api/goals", { name: "Paused", targetAmount: 50_000_000, monthlyAmount: 1_000_000 })).json();
+    await patch(`/api/goals/${paused.id}`, { paused: true });
+    // Second moves to the top, so it's filled first.
+    await app.inject({ method: "PUT", url: "/api/goals/order", payload: { ids: [second.id, first.id] } });
+    expect((await get()).goals.map((goal: { name: string }) => goal.name)).toEqual(["Second", "First", "Paused"]);
+    const { autoFundAfterPayday } = await import("../services/goals");
+    expect(await autoFundAfterPayday()).toBeNull();
+    await app.inject({ method: "PUT", url: "/api/goals/settings", payload: { autoFundOnPayday: true } });
+    const result = await autoFundAfterPayday();
+    expect(result?.assigned).toEqual([{ goalId: second.id, amount: 30_000_000 }, { goalId: first.id, amount: 15_000_000 }]);
+    const overview = await get();
+    expect(overview.autoFundOnPayday).toBe(true);
+    expect(overview.goals.find((goal: { id: number }) => goal.id === paused.id)).toMatchObject({ paused: true, setAside: 0, reachMonths: null });
+  });
+
+  it("starts a yearly goal again for next year once it's paid", async () => {
+    const tax = (await post("/api/goals", { name: "Vehicle tax", targetAmount: 3_000_000, recurrence: "yearly", byDate: new Date(2026, 11, 15, 12).getTime(), setAside: 3_000_000 })).json();
+    await post(`/api/goals/${tax.id}/parts`, { name: "PKB", amount: 3_000_000 });
+    await patch(`/api/goal-parts/${(await app.inject({ method: "GET", url: `/api/goals/${tax.id}` })).json().parts[0].id}`, { paid: true });
+    const next = (await post(`/api/goals/${tax.id}/complete`, { transactionId: 2 })).json();
+    expect(next).toMatchObject({ status: "active", setAside: 0, recurrence: "yearly" });
+    expect(new Date(next.byDate).getFullYear()).toBeGreaterThanOrEqual(2027);
+    expect((await app.inject({ method: "GET", url: `/api/goals/${tax.id}` })).json().parts[0].paidAt).toBeNull();
+  });
+
+  it("pays expenses in a goal's category out of it, and gives the money back if the expense goes", async () => {
+    state.db.insert(schema.categories).values({ id: 5, name: "Travel" }).run();
+    const trip = (await post("/api/goals", { name: "Trip", targetAmount: 10_000_000, setAside: 3_000_000 })).json();
+    // An expense from before the category was chosen doesn't count.
+    state.db.insert(schema.transactions).values({ id: 3, date: new Date(Date.now() - 86_400_000), description: "Old train", status: "posted" }).run();
+    state.db.insert(schema.transactionCategoryAllocations).values({ transactionId: 3, categoryId: 5, amount: 500_000 }).run();
+    await patch(`/api/goals/${trip.id}`, { categoryId: 5 });
+    state.db.insert(schema.transactions).values({ id: 4, date: new Date(Date.now() + 60_000), description: "Ryokan", status: "posted" }).run();
+    state.db.insert(schema.transactionCategoryAllocations).values({ transactionId: 4, categoryId: 5, amount: 1_200_000 }).run();
+    expect((await get()).goals[0].setAside).toBe(1_800_000);
+    // Looking again doesn't take it twice.
+    expect((await get()).goals[0].setAside).toBe(1_800_000);
+    state.db.update(schema.transactions).set({ status: "reversed" }).where(eq(schema.transactions.id, 4)).run();
+    expect((await get()).goals[0].setAside).toBe(3_000_000);
+    expect((await app.inject({ method: "GET", url: `/api/goals/${trip.id}` })).json().categoryName).toBe("Travel");
+  });
+
+  it("queues a deleted goal's files for removal from storage", async () => {
+    const goal = (await post("/api/goals", { name: "Phone", targetAmount: 1 })).json();
+    state.db.insert(schema.goalAttachments).values({ goalId: goal.id, filename: "quote.pdf", r2Key: "goal-files/x/quote.pdf", mimetype: "application/pdf", fileSize: 10 }).run();
+    expect((await app.inject({ method: "DELETE", url: `/api/goals/${goal.id}` })).statusCode).toBe(204);
+    const queued = state.db.select().from(schema.storageDeletionOutbox).all();
+    expect(queued.map((row: { r2Key: string; entityType: string }) => [row.r2Key, row.entityType])).toEqual([["goal-files/x/quote.pdf", "goal_attachment"]]);
+  });
 });

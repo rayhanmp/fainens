@@ -5311,6 +5311,15 @@ export const GetGoalsOverview200GoalsItemStatus = {
   archived: 'archived',
 } as const;
 
+export type GetGoalsOverview200GoalsItemRecurrence = typeof GetGoalsOverview200GoalsItemRecurrence[keyof typeof GetGoalsOverview200GoalsItemRecurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoalsOverview200GoalsItemRecurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
 export type GetGoalsOverview200GoalsItem = {
   /**
    * @minimum -9007199254740991
@@ -5323,7 +5332,10 @@ export type GetGoalsOverview200GoalsItem = {
   byDate: number | null;
   kind: GetGoalsOverview200GoalsItemKind;
   monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
   status: GetGoalsOverview200GoalsItemStatus;
+  paused: boolean;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -5343,8 +5355,46 @@ export type GetGoalsOverview200GoalsItem = {
    * @maximum 9007199254740991
    */
   sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: GetGoalsOverview200GoalsItemRecurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
   setAside: number;
   setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
 };
 
 export type GetGoalsOverview200 = {
@@ -5353,6 +5403,9 @@ export type GetGoalsOverview200 = {
   unassigned: number;
   accounts: GetGoalsOverview200AccountsItem[];
   goals: GetGoalsOverview200GoalsItem[];
+  /** @nullable */
+  salary: number | null;
+  autoFundOnPayday: boolean;
 };
 
 export type CreateGoalBodyKind = typeof CreateGoalBodyKind[keyof typeof CreateGoalBodyKind];
@@ -5362,6 +5415,15 @@ export type CreateGoalBodyKind = typeof CreateGoalBodyKind[keyof typeof CreateGo
 export const CreateGoalBodyKind = {
   spend: 'spend',
   keep: 'keep',
+} as const;
+
+export type CreateGoalBodyRecurrence = typeof CreateGoalBodyRecurrence[keyof typeof CreateGoalBodyRecurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateGoalBodyRecurrence = {
+  none: 'none',
+  yearly: 'yearly',
 } as const;
 
 export type CreateGoalBody = {
@@ -5388,11 +5450,68 @@ export type CreateGoalBody = {
    */
   monthlyAmount?: number;
   /**
+   * @minimum 0
+   * @maximum 100
+   * @exclusiveMinimum
+   * @nullable
+   */
+  monthlyPercent?: number | null;
+  /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
    * @nullable
    */
   wishlistId?: number | null;
+  /**
+   * @maxLength 16
+   * @nullable
+   */
+  icon?: string | null;
+  /**
+   * @maxLength 20000
+   * @nullable
+   */
+  description?: string | null;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  linkUrl?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   */
+  linkTitle?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   * @pattern ^wishlist-images\/[A-Za-z0-9._-]+$
+   */
+  linkImage?: string | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  accountId?: number | null;
+  /**
+   * @minimum -20
+   * @maximum 50
+   */
+  expectedReturn?: number;
+  recurrence?: CreateGoalBodyRecurrence;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categorySince?: number | null;
   /**
    * @minimum 0
    * @maximum 10000000000000
@@ -5419,6 +5538,15 @@ export const CreateGoal201Status = {
   archived: 'archived',
 } as const;
 
+export type CreateGoal201Recurrence = typeof CreateGoal201Recurrence[keyof typeof CreateGoal201Recurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CreateGoal201Recurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
 export type CreateGoal201 = {
   /**
    * @minimum -9007199254740991
@@ -5431,7 +5559,10 @@ export type CreateGoal201 = {
   byDate: number | null;
   kind: CreateGoal201Kind;
   monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
   status: CreateGoal201Status;
+  paused: boolean;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -5451,8 +5582,46 @@ export type CreateGoal201 = {
    * @maximum 9007199254740991
    */
   sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: CreateGoal201Recurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
   setAside: number;
   setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
 };
 
 export type CreateGoal400 = {
@@ -5465,6 +5634,507 @@ export type CreateGoal409 = {
   [key: string]: unknown;
 };
 
+export type ReorderGoalsBody = {
+  /**
+   * @minItems 1
+   * @maxItems 500
+   */
+  ids: number[];
+};
+
+export type ReorderGoals200AccountsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  liquidityClass: string;
+  balance: number;
+  included: boolean;
+};
+
+export type ReorderGoals200GoalsItemKind = typeof ReorderGoals200GoalsItemKind[keyof typeof ReorderGoals200GoalsItemKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReorderGoals200GoalsItemKind = {
+  spend: 'spend',
+  keep: 'keep',
+} as const;
+
+export type ReorderGoals200GoalsItemStatus = typeof ReorderGoals200GoalsItemStatus[keyof typeof ReorderGoals200GoalsItemStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReorderGoals200GoalsItemStatus = {
+  active: 'active',
+  done: 'done',
+  archived: 'archived',
+} as const;
+
+export type ReorderGoals200GoalsItemRecurrence = typeof ReorderGoals200GoalsItemRecurrence[keyof typeof ReorderGoals200GoalsItemRecurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReorderGoals200GoalsItemRecurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
+export type ReorderGoals200GoalsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  targetAmount: number;
+  /** @nullable */
+  byDate: number | null;
+  kind: ReorderGoals200GoalsItemKind;
+  monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
+  status: ReorderGoals200GoalsItemStatus;
+  paused: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  wishlistId: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  spentTransactionId: number | null;
+  /** @nullable */
+  doneAt: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: ReorderGoals200GoalsItemRecurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
+  setAside: number;
+  setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
+};
+
+export type ReorderGoals200 = {
+  available: number;
+  setAside: number;
+  unassigned: number;
+  accounts: ReorderGoals200AccountsItem[];
+  goals: ReorderGoals200GoalsItem[];
+  /** @nullable */
+  salary: number | null;
+  autoFundOnPayday: boolean;
+};
+
+export type ReorderGoals400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type FundGoalsMonthlyBody = {
+  /**
+   * @maxItems 200
+   * @nullable
+   */
+  goalIds?: number[] | null;
+};
+
+export type FundGoalsMonthly200AssignedItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  amount: number;
+};
+
+export type FundGoalsMonthly200 = {
+  assigned: FundGoalsMonthly200AssignedItem[];
+  total: number;
+};
+
+export type UpdateGoalSettingsBody = {
+  /** @maxItems 200 */
+  excludedAccountIds?: number[];
+  autoFundOnPayday?: boolean;
+};
+
+export type UpdateGoalSettings200AccountsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  liquidityClass: string;
+  balance: number;
+  included: boolean;
+};
+
+export type UpdateGoalSettings200GoalsItemKind = typeof UpdateGoalSettings200GoalsItemKind[keyof typeof UpdateGoalSettings200GoalsItemKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalSettings200GoalsItemKind = {
+  spend: 'spend',
+  keep: 'keep',
+} as const;
+
+export type UpdateGoalSettings200GoalsItemStatus = typeof UpdateGoalSettings200GoalsItemStatus[keyof typeof UpdateGoalSettings200GoalsItemStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalSettings200GoalsItemStatus = {
+  active: 'active',
+  done: 'done',
+  archived: 'archived',
+} as const;
+
+export type UpdateGoalSettings200GoalsItemRecurrence = typeof UpdateGoalSettings200GoalsItemRecurrence[keyof typeof UpdateGoalSettings200GoalsItemRecurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalSettings200GoalsItemRecurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
+export type UpdateGoalSettings200GoalsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  targetAmount: number;
+  /** @nullable */
+  byDate: number | null;
+  kind: UpdateGoalSettings200GoalsItemKind;
+  monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
+  status: UpdateGoalSettings200GoalsItemStatus;
+  paused: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  wishlistId: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  spentTransactionId: number | null;
+  /** @nullable */
+  doneAt: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: UpdateGoalSettings200GoalsItemRecurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
+  setAside: number;
+  setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
+};
+
+export type UpdateGoalSettings200 = {
+  available: number;
+  setAside: number;
+  unassigned: number;
+  accounts: UpdateGoalSettings200AccountsItem[];
+  goals: UpdateGoalSettings200GoalsItem[];
+  /** @nullable */
+  salary: number | null;
+  autoFundOnPayday: boolean;
+};
+
+export type UpdateGoalSettings400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type GetGoal200GoalKind = typeof GetGoal200GoalKind[keyof typeof GetGoal200GoalKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoal200GoalKind = {
+  spend: 'spend',
+  keep: 'keep',
+} as const;
+
+export type GetGoal200GoalStatus = typeof GetGoal200GoalStatus[keyof typeof GetGoal200GoalStatus];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoal200GoalStatus = {
+  active: 'active',
+  done: 'done',
+  archived: 'archived',
+} as const;
+
+export type GetGoal200GoalRecurrence = typeof GetGoal200GoalRecurrence[keyof typeof GetGoal200GoalRecurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoal200GoalRecurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
+export type GetGoal200Goal = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  targetAmount: number;
+  /** @nullable */
+  byDate: number | null;
+  kind: GetGoal200GoalKind;
+  monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
+  status: GetGoal200GoalStatus;
+  paused: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  wishlistId: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  spentTransactionId: number | null;
+  /** @nullable */
+  doneAt: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: GetGoal200GoalRecurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
+  setAside: number;
+  setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
+};
+
+export type GetGoal200PartsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  name: string;
+  amount: number;
+  /** @nullable */
+  paidAt: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  transactionId: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type GetGoal200AttachmentsItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  filename: string;
+  mimetype: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  fileSize: number;
+  isCover: boolean;
+  createdAt: number;
+};
+
+export type GetGoal200MilestonesItem = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  share: number;
+  at: number;
+};
+
+/**
+ * @nullable
+ */
+export type GetGoal200Account = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  balance: number;
+  goalsHold: number;
+} | null;
+
+export type GetGoal200 = {
+  goal: GetGoal200Goal;
+  parts: GetGoal200PartsItem[];
+  attachments: GetGoal200AttachmentsItem[];
+  milestones: GetGoal200MilestonesItem[];
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  streak: number;
+  /** @nullable */
+  account: GetGoal200Account;
+  /** @nullable */
+  categoryName: string | null;
+};
+
+export type GetGoal404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type UpdateGoalBodyKind = typeof UpdateGoalBodyKind[keyof typeof UpdateGoalBodyKind];
 
 
@@ -5472,6 +6142,15 @@ export type UpdateGoalBodyKind = typeof UpdateGoalBodyKind[keyof typeof UpdateGo
 export const UpdateGoalBodyKind = {
   spend: 'spend',
   keep: 'keep',
+} as const;
+
+export type UpdateGoalBodyRecurrence = typeof UpdateGoalBodyRecurrence[keyof typeof UpdateGoalBodyRecurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalBodyRecurrence = {
+  none: 'none',
+  yearly: 'yearly',
 } as const;
 
 export type UpdateGoalBodyStatus = typeof UpdateGoalBodyStatus[keyof typeof UpdateGoalBodyStatus];
@@ -5507,12 +6186,70 @@ export type UpdateGoalBody = {
    */
   monthlyAmount?: number;
   /**
+   * @minimum 0
+   * @maximum 100
+   * @exclusiveMinimum
+   * @nullable
+   */
+  monthlyPercent?: number | null;
+  /**
    * @maximum 9007199254740991
    * @exclusiveMinimum
    * @nullable
    */
   wishlistId?: number | null;
+  /**
+   * @maxLength 16
+   * @nullable
+   */
+  icon?: string | null;
+  /**
+   * @maxLength 20000
+   * @nullable
+   */
+  description?: string | null;
+  /**
+   * @maxLength 2000
+   * @nullable
+   */
+  linkUrl?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   */
+  linkTitle?: string | null;
+  /**
+   * @maxLength 300
+   * @nullable
+   * @pattern ^wishlist-images\/[A-Za-z0-9._-]+$
+   */
+  linkImage?: string | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  accountId?: number | null;
+  /**
+   * @minimum -20
+   * @maximum 50
+   */
+  expectedReturn?: number;
+  recurrence?: UpdateGoalBodyRecurrence;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categoryId?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  categorySince?: number | null;
   status?: UpdateGoalBodyStatus;
+  paused?: boolean;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -5539,6 +6276,15 @@ export const UpdateGoal200Status = {
   archived: 'archived',
 } as const;
 
+export type UpdateGoal200Recurrence = typeof UpdateGoal200Recurrence[keyof typeof UpdateGoal200Recurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoal200Recurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
 export type UpdateGoal200 = {
   /**
    * @minimum -9007199254740991
@@ -5551,7 +6297,10 @@ export type UpdateGoal200 = {
   byDate: number | null;
   kind: UpdateGoal200Kind;
   monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
   status: UpdateGoal200Status;
+  paused: boolean;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -5571,8 +6320,46 @@ export type UpdateGoal200 = {
    * @maximum 9007199254740991
    */
   sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: UpdateGoal200Recurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
   setAside: number;
   setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
 };
 
 export type UpdateGoal400 = {
@@ -5623,6 +6410,12 @@ export type ListGoalAllocations200Item = {
   transactionId: number | null;
   /** @nullable */
   transactionDescription: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  partId: number | null;
   createdAt: number;
 };
 
@@ -5658,6 +6451,15 @@ export const AllocateToGoal200Status = {
   archived: 'archived',
 } as const;
 
+export type AllocateToGoal200Recurrence = typeof AllocateToGoal200Recurrence[keyof typeof AllocateToGoal200Recurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AllocateToGoal200Recurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
 export type AllocateToGoal200 = {
   /**
    * @minimum -9007199254740991
@@ -5670,7 +6472,10 @@ export type AllocateToGoal200 = {
   byDate: number | null;
   kind: AllocateToGoal200Kind;
   monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
   status: AllocateToGoal200Status;
+  paused: boolean;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -5690,8 +6495,46 @@ export type AllocateToGoal200 = {
    * @maximum 9007199254740991
    */
   sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: AllocateToGoal200Recurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
   setAside: number;
   setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
 };
 
 export type AllocateToGoal400 = {
@@ -5705,6 +6548,151 @@ export type AllocateToGoal404 = {
 };
 
 export type AllocateToGoal409 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SpendFromGoalBody = {
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  amount: number;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  transactionId?: number | null;
+  /**
+   * @maximum 9007199254740991
+   * @exclusiveMinimum
+   * @nullable
+   */
+  partId?: number | null;
+  /**
+   * @maxLength 200
+   * @nullable
+   */
+  note?: string | null;
+};
+
+export type SpendFromGoal200Kind = typeof SpendFromGoal200Kind[keyof typeof SpendFromGoal200Kind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const SpendFromGoal200Kind = {
+  spend: 'spend',
+  keep: 'keep',
+} as const;
+
+export type SpendFromGoal200Status = typeof SpendFromGoal200Status[keyof typeof SpendFromGoal200Status];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const SpendFromGoal200Status = {
+  active: 'active',
+  done: 'done',
+  archived: 'archived',
+} as const;
+
+export type SpendFromGoal200Recurrence = typeof SpendFromGoal200Recurrence[keyof typeof SpendFromGoal200Recurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const SpendFromGoal200Recurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
+export type SpendFromGoal200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  name: string;
+  targetAmount: number;
+  /** @nullable */
+  byDate: number | null;
+  kind: SpendFromGoal200Kind;
+  monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
+  status: SpendFromGoal200Status;
+  paused: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  wishlistId: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  spentTransactionId: number | null;
+  /** @nullable */
+  doneAt: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: SpendFromGoal200Recurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
+  setAside: number;
+  setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
+};
+
+export type SpendFromGoal400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SpendFromGoal404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type SpendFromGoal409 = {
   error: string;
   [key: string]: unknown;
 };
@@ -5737,6 +6725,15 @@ export const CompleteGoal200Status = {
   archived: 'archived',
 } as const;
 
+export type CompleteGoal200Recurrence = typeof CompleteGoal200Recurrence[keyof typeof CompleteGoal200Recurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const CompleteGoal200Recurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
 export type CompleteGoal200 = {
   /**
    * @minimum -9007199254740991
@@ -5749,7 +6746,10 @@ export type CompleteGoal200 = {
   byDate: number | null;
   kind: CompleteGoal200Kind;
   monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
   status: CompleteGoal200Status;
+  paused: boolean;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -5769,8 +6769,46 @@ export type CompleteGoal200 = {
    * @maximum 9007199254740991
    */
   sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: CompleteGoal200Recurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
   setAside: number;
   setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
 };
 
 export type CompleteGoal400 = {
@@ -5807,6 +6845,15 @@ export const ReopenGoal200Status = {
   archived: 'archived',
 } as const;
 
+export type ReopenGoal200Recurrence = typeof ReopenGoal200Recurrence[keyof typeof ReopenGoal200Recurrence];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const ReopenGoal200Recurrence = {
+  none: 'none',
+  yearly: 'yearly',
+} as const;
+
 export type ReopenGoal200 = {
   /**
    * @minimum -9007199254740991
@@ -5819,7 +6866,10 @@ export type ReopenGoal200 = {
   byDate: number | null;
   kind: ReopenGoal200Kind;
   monthlyAmount: number;
+  /** @nullable */
+  monthlyPercent: number | null;
   status: ReopenGoal200Status;
+  paused: boolean;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -5839,8 +6889,46 @@ export type ReopenGoal200 = {
    * @maximum 9007199254740991
    */
   sortOrder: number;
+  /** @nullable */
+  icon: string | null;
+  /** @nullable */
+  description: string | null;
+  /** @nullable */
+  linkUrl: string | null;
+  /** @nullable */
+  linkTitle: string | null;
+  /** @nullable */
+  linkImage: string | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: ReopenGoal200Recurrence;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  categoryId: number | null;
+  /** @nullable */
+  categorySince: number | null;
   setAside: number;
   setAsideThisMonth: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  reachMonths: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  coverAttachmentId: number | null;
 };
 
 export type ReopenGoal404 = {
@@ -5848,109 +6936,268 @@ export type ReopenGoal404 = {
   [key: string]: unknown;
 };
 
-export type FundGoalsMonthlyBody = {
+export type AddGoalPartBody = {
   /**
-   * @maxItems 200
-   * @nullable
+   * @minLength 1
+   * @maxLength 120
    */
-  goalIds?: number[] | null;
+  name: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  amount: number;
 };
 
-export type FundGoalsMonthly200AssignedItem = {
+export type AddGoalPart201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
    */
   goalId: number;
+  name: string;
   amount: number;
-};
-
-export type FundGoalsMonthly200 = {
-  assigned: FundGoalsMonthly200AssignedItem[];
-  total: number;
-};
-
-export type UpdateGoalSettingsBody = {
-  /** @maxItems 200 */
-  excludedAccountIds: number[];
-};
-
-export type UpdateGoalSettings200AccountsItem = {
-  /**
-   * @minimum -9007199254740991
-   * @maximum 9007199254740991
-   */
-  id: number;
-  name: string;
-  liquidityClass: string;
-  balance: number;
-  included: boolean;
-};
-
-export type UpdateGoalSettings200GoalsItemKind = typeof UpdateGoalSettings200GoalsItemKind[keyof typeof UpdateGoalSettings200GoalsItemKind];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const UpdateGoalSettings200GoalsItemKind = {
-  spend: 'spend',
-  keep: 'keep',
-} as const;
-
-export type UpdateGoalSettings200GoalsItemStatus = typeof UpdateGoalSettings200GoalsItemStatus[keyof typeof UpdateGoalSettings200GoalsItemStatus];
-
-
-// eslint-disable-next-line @typescript-eslint/no-redeclare
-export const UpdateGoalSettings200GoalsItemStatus = {
-  active: 'active',
-  done: 'done',
-  archived: 'archived',
-} as const;
-
-export type UpdateGoalSettings200GoalsItem = {
-  /**
-   * @minimum -9007199254740991
-   * @maximum 9007199254740991
-   */
-  id: number;
-  name: string;
-  targetAmount: number;
   /** @nullable */
-  byDate: number | null;
-  kind: UpdateGoalSettings200GoalsItemKind;
-  monthlyAmount: number;
-  status: UpdateGoalSettings200GoalsItemStatus;
+  paidAt: number | null;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
    * @nullable
    */
-  wishlistId: number | null;
-  /**
-   * @minimum -9007199254740991
-   * @maximum 9007199254740991
-   * @nullable
-   */
-  spentTransactionId: number | null;
-  /** @nullable */
-  doneAt: number | null;
+  transactionId: number | null;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
    */
   sortOrder: number;
-  setAside: number;
-  setAsideThisMonth: number;
 };
 
-export type UpdateGoalSettings200 = {
-  available: number;
-  setAside: number;
-  unassigned: number;
-  accounts: UpdateGoalSettings200AccountsItem[];
-  goals: UpdateGoalSettings200GoalsItem[];
+export type AddGoalPart400 = {
+  error: string;
+  [key: string]: unknown;
 };
 
-export type UpdateGoalSettings400 = {
+export type AddGoalPart404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateGoalPartBody = {
+  /**
+   * @minLength 1
+   * @maxLength 120
+   */
+  name?: string;
+  /**
+   * @minimum 0
+   * @maximum 10000000000000
+   */
+  amount?: number;
+  paid?: boolean;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder?: number;
+};
+
+export type UpdateGoalPart200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  name: string;
+  amount: number;
+  /** @nullable */
+  paidAt: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   * @nullable
+   */
+  transactionId: number | null;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  sortOrder: number;
+};
+
+export type UpdateGoalPart400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateGoalPart404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteGoalPart204 = typeof DeleteGoalPart204[keyof typeof DeleteGoalPart204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteGoalPart204 = {
+} as const;
+
+export type DeleteGoalPart404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UploadGoalAttachmentBodyContentType = typeof UploadGoalAttachmentBodyContentType[keyof typeof UploadGoalAttachmentBodyContentType];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UploadGoalAttachmentBodyContentType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+  'image/gif': 'image/gif',
+  'application/pdf': 'application/pdf',
+  'text/plain': 'text/plain',
+} as const;
+
+export type UploadGoalAttachmentBody = {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  filename: string;
+  contentType: UploadGoalAttachmentBodyContentType;
+  /** @minLength 1 */
+  data: string;
+};
+
+export type UploadGoalAttachment201 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  filename: string;
+  mimetype: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  fileSize: number;
+  isCover: boolean;
+  createdAt: number;
+};
+
+export type UploadGoalAttachment400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UploadGoalAttachment404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UploadGoalAttachment500 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type ServeGoalAttachment404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateGoalAttachmentBody = {
+  isCover?: boolean;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  filename?: string;
+};
+
+export type UpdateGoalAttachment200 = {
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  id: number;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  goalId: number;
+  filename: string;
+  mimetype: string;
+  /**
+   * @minimum -9007199254740991
+   * @maximum 9007199254740991
+   */
+  fileSize: number;
+  isCover: boolean;
+  createdAt: number;
+};
+
+export type UpdateGoalAttachment400 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type UpdateGoalAttachment404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+/**
+ * @nullable
+ */
+export type DeleteGoalAttachment204 = typeof DeleteGoalAttachment204[keyof typeof DeleteGoalAttachment204] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const DeleteGoalAttachment204 = {
+} as const;
+
+export type DeleteGoalAttachment404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
+export type PreviewGoalLinkBody = {
+  /** @maxLength 2000 */
+  url: string;
+};
+
+export type PreviewGoalLink200 = {
+  /** @nullable */
+  title: string | null;
+  /** @nullable */
+  price: number | null;
+  /** @nullable */
+  image: string | null;
+  /** @nullable */
+  source: string | null;
+};
+
+export type PreviewGoalLink400 = {
   error: string;
   [key: string]: unknown;
 };
@@ -20428,6 +21675,11 @@ export type RunDatabaseBackup401 = {
   [key: string]: unknown;
 };
 
+export type ServeGoalLinkImage404 = {
+  error: string;
+  [key: string]: unknown;
+};
+
 export type ServeLocalAttachment404 = {
   error: string;
   [key: string]: unknown;
@@ -23310,6 +24562,162 @@ export const createGoal = async (createGoalBody: CreateGoalBody, options?: Reque
 
 
 
+export type reorderGoalsResponse200 = {
+  data: ReorderGoals200
+  status: 200
+}
+
+export type reorderGoalsResponse400 = {
+  data: ReorderGoals400
+  status: 400
+}
+    
+export type reorderGoalsResponseSuccess = (reorderGoalsResponse200) & {
+  headers: Headers;
+};
+export type reorderGoalsResponseError = (reorderGoalsResponse400) & {
+  headers: Headers;
+};
+
+export type reorderGoalsResponse = (reorderGoalsResponseSuccess | reorderGoalsResponseError)
+
+export const getReorderGoalsUrl = () => {
+
+
+  
+
+  return `/api/goals/order`
+}
+
+export const reorderGoals = async (reorderGoalsBody: ReorderGoalsBody, options?: RequestInit): Promise<reorderGoalsResponse> => {
+  
+  return generatedFetch<reorderGoalsResponse>(getReorderGoalsUrl(),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reorderGoalsBody,)
+  }
+);}
+
+
+
+export type fundGoalsMonthlyResponse200 = {
+  data: FundGoalsMonthly200
+  status: 200
+}
+    
+export type fundGoalsMonthlyResponseSuccess = (fundGoalsMonthlyResponse200) & {
+  headers: Headers;
+};
+;
+
+export type fundGoalsMonthlyResponse = (fundGoalsMonthlyResponseSuccess)
+
+export const getFundGoalsMonthlyUrl = () => {
+
+
+  
+
+  return `/api/goals/fund-monthly`
+}
+
+export const fundGoalsMonthly = async (fundGoalsMonthlyBody: FundGoalsMonthlyBody, options?: RequestInit): Promise<fundGoalsMonthlyResponse> => {
+  
+  return generatedFetch<fundGoalsMonthlyResponse>(getFundGoalsMonthlyUrl(),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      fundGoalsMonthlyBody,)
+  }
+);}
+
+
+
+export type updateGoalSettingsResponse200 = {
+  data: UpdateGoalSettings200
+  status: 200
+}
+
+export type updateGoalSettingsResponse400 = {
+  data: UpdateGoalSettings400
+  status: 400
+}
+    
+export type updateGoalSettingsResponseSuccess = (updateGoalSettingsResponse200) & {
+  headers: Headers;
+};
+export type updateGoalSettingsResponseError = (updateGoalSettingsResponse400) & {
+  headers: Headers;
+};
+
+export type updateGoalSettingsResponse = (updateGoalSettingsResponseSuccess | updateGoalSettingsResponseError)
+
+export const getUpdateGoalSettingsUrl = () => {
+
+
+  
+
+  return `/api/goals/settings`
+}
+
+export const updateGoalSettings = async (updateGoalSettingsBody: UpdateGoalSettingsBody, options?: RequestInit): Promise<updateGoalSettingsResponse> => {
+  
+  return generatedFetch<updateGoalSettingsResponse>(getUpdateGoalSettingsUrl(),
+  {      
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateGoalSettingsBody,)
+  }
+);}
+
+
+
+export type getGoalResponse200 = {
+  data: GetGoal200
+  status: 200
+}
+
+export type getGoalResponse404 = {
+  data: GetGoal404
+  status: 404
+}
+    
+export type getGoalResponseSuccess = (getGoalResponse200) & {
+  headers: Headers;
+};
+export type getGoalResponseError = (getGoalResponse404) & {
+  headers: Headers;
+};
+
+export type getGoalResponse = (getGoalResponseSuccess | getGoalResponseError)
+
+export const getGetGoalUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}`
+}
+
+export const getGoal = async (id: number, options?: RequestInit): Promise<getGoalResponse> => {
+  
+  return generatedFetch<getGoalResponse>(getGetGoalUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
 export type updateGoalResponse200 = {
   data: UpdateGoal200
   status: 200
@@ -23482,6 +24890,58 @@ export const allocateToGoal = async (id: number,
 
 
 
+export type spendFromGoalResponse200 = {
+  data: SpendFromGoal200
+  status: 200
+}
+
+export type spendFromGoalResponse400 = {
+  data: SpendFromGoal400
+  status: 400
+}
+
+export type spendFromGoalResponse404 = {
+  data: SpendFromGoal404
+  status: 404
+}
+
+export type spendFromGoalResponse409 = {
+  data: SpendFromGoal409
+  status: 409
+}
+    
+export type spendFromGoalResponseSuccess = (spendFromGoalResponse200) & {
+  headers: Headers;
+};
+export type spendFromGoalResponseError = (spendFromGoalResponse400 | spendFromGoalResponse404 | spendFromGoalResponse409) & {
+  headers: Headers;
+};
+
+export type spendFromGoalResponse = (spendFromGoalResponseSuccess | spendFromGoalResponseError)
+
+export const getSpendFromGoalUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/spend`
+}
+
+export const spendFromGoal = async (id: number,
+    spendFromGoalBody: SpendFromGoalBody, options?: RequestInit): Promise<spendFromGoalResponse> => {
+  
+  return generatedFetch<spendFromGoalResponse>(getSpendFromGoalUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      spendFromGoalBody,)
+  }
+);}
+
+
+
 export type completeGoalResponse200 = {
   data: CompleteGoal200
   status: 200
@@ -23574,76 +25034,348 @@ export const reopenGoal = async (id: number, options?: RequestInit): Promise<reo
 
 
 
-export type fundGoalsMonthlyResponse200 = {
-  data: FundGoalsMonthly200
-  status: 200
+export type addGoalPartResponse201 = {
+  data: AddGoalPart201
+  status: 201
+}
+
+export type addGoalPartResponse400 = {
+  data: AddGoalPart400
+  status: 400
+}
+
+export type addGoalPartResponse404 = {
+  data: AddGoalPart404
+  status: 404
 }
     
-export type fundGoalsMonthlyResponseSuccess = (fundGoalsMonthlyResponse200) & {
+export type addGoalPartResponseSuccess = (addGoalPartResponse201) & {
   headers: Headers;
 };
-;
+export type addGoalPartResponseError = (addGoalPartResponse400 | addGoalPartResponse404) & {
+  headers: Headers;
+};
 
-export type fundGoalsMonthlyResponse = (fundGoalsMonthlyResponseSuccess)
+export type addGoalPartResponse = (addGoalPartResponseSuccess | addGoalPartResponseError)
 
-export const getFundGoalsMonthlyUrl = () => {
+export const getAddGoalPartUrl = (id: number,) => {
 
 
   
 
-  return `/api/goals/fund-monthly`
+  return `/api/goals/${id}/parts`
 }
 
-export const fundGoalsMonthly = async (fundGoalsMonthlyBody: FundGoalsMonthlyBody, options?: RequestInit): Promise<fundGoalsMonthlyResponse> => {
+export const addGoalPart = async (id: number,
+    addGoalPartBody: AddGoalPartBody, options?: RequestInit): Promise<addGoalPartResponse> => {
   
-  return generatedFetch<fundGoalsMonthlyResponse>(getFundGoalsMonthlyUrl(),
+  return generatedFetch<addGoalPartResponse>(getAddGoalPartUrl(id),
   {      
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      fundGoalsMonthlyBody,)
+      addGoalPartBody,)
   }
 );}
 
 
 
-export type updateGoalSettingsResponse200 = {
-  data: UpdateGoalSettings200
+export type updateGoalPartResponse200 = {
+  data: UpdateGoalPart200
   status: 200
 }
 
-export type updateGoalSettingsResponse400 = {
-  data: UpdateGoalSettings400
+export type updateGoalPartResponse400 = {
+  data: UpdateGoalPart400
+  status: 400
+}
+
+export type updateGoalPartResponse404 = {
+  data: UpdateGoalPart404
+  status: 404
+}
+    
+export type updateGoalPartResponseSuccess = (updateGoalPartResponse200) & {
+  headers: Headers;
+};
+export type updateGoalPartResponseError = (updateGoalPartResponse400 | updateGoalPartResponse404) & {
+  headers: Headers;
+};
+
+export type updateGoalPartResponse = (updateGoalPartResponseSuccess | updateGoalPartResponseError)
+
+export const getUpdateGoalPartUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-parts/${id}`
+}
+
+export const updateGoalPart = async (id: number,
+    updateGoalPartBody: UpdateGoalPartBody, options?: RequestInit): Promise<updateGoalPartResponse> => {
+  
+  return generatedFetch<updateGoalPartResponse>(getUpdateGoalPartUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateGoalPartBody,)
+  }
+);}
+
+
+
+export type deleteGoalPartResponse204 = {
+  data: DeleteGoalPart204
+  status: 204
+}
+
+export type deleteGoalPartResponse404 = {
+  data: DeleteGoalPart404
+  status: 404
+}
+    
+export type deleteGoalPartResponseSuccess = (deleteGoalPartResponse204) & {
+  headers: Headers;
+};
+export type deleteGoalPartResponseError = (deleteGoalPartResponse404) & {
+  headers: Headers;
+};
+
+export type deleteGoalPartResponse = (deleteGoalPartResponseSuccess | deleteGoalPartResponseError)
+
+export const getDeleteGoalPartUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-parts/${id}`
+}
+
+export const deleteGoalPart = async (id: number, options?: RequestInit): Promise<deleteGoalPartResponse> => {
+  
+  return generatedFetch<deleteGoalPartResponse>(getDeleteGoalPartUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type uploadGoalAttachmentResponse201 = {
+  data: UploadGoalAttachment201
+  status: 201
+}
+
+export type uploadGoalAttachmentResponse400 = {
+  data: UploadGoalAttachment400
+  status: 400
+}
+
+export type uploadGoalAttachmentResponse404 = {
+  data: UploadGoalAttachment404
+  status: 404
+}
+
+export type uploadGoalAttachmentResponse500 = {
+  data: UploadGoalAttachment500
+  status: 500
+}
+    
+export type uploadGoalAttachmentResponseSuccess = (uploadGoalAttachmentResponse201) & {
+  headers: Headers;
+};
+export type uploadGoalAttachmentResponseError = (uploadGoalAttachmentResponse400 | uploadGoalAttachmentResponse404 | uploadGoalAttachmentResponse500) & {
+  headers: Headers;
+};
+
+export type uploadGoalAttachmentResponse = (uploadGoalAttachmentResponseSuccess | uploadGoalAttachmentResponseError)
+
+export const getUploadGoalAttachmentUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goals/${id}/attachments`
+}
+
+export const uploadGoalAttachment = async (id: number,
+    uploadGoalAttachmentBody: UploadGoalAttachmentBody, options?: RequestInit): Promise<uploadGoalAttachmentResponse> => {
+  
+  return generatedFetch<uploadGoalAttachmentResponse>(getUploadGoalAttachmentUrl(id),
+  {      
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      uploadGoalAttachmentBody,)
+  }
+);}
+
+
+
+export type serveGoalAttachmentResponse404 = {
+  data: ServeGoalAttachment404
+  status: 404
+}
+    
+;
+export type serveGoalAttachmentResponseError = (serveGoalAttachmentResponse404) & {
+  headers: Headers;
+};
+
+export type serveGoalAttachmentResponse = (serveGoalAttachmentResponseError)
+
+export const getServeGoalAttachmentUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-attachments/${id}/file`
+}
+
+export const serveGoalAttachment = async (id: number, options?: RequestInit): Promise<serveGoalAttachmentResponse> => {
+  
+  return generatedFetch<serveGoalAttachmentResponse>(getServeGoalAttachmentUrl(id),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type updateGoalAttachmentResponse200 = {
+  data: UpdateGoalAttachment200
+  status: 200
+}
+
+export type updateGoalAttachmentResponse400 = {
+  data: UpdateGoalAttachment400
+  status: 400
+}
+
+export type updateGoalAttachmentResponse404 = {
+  data: UpdateGoalAttachment404
+  status: 404
+}
+    
+export type updateGoalAttachmentResponseSuccess = (updateGoalAttachmentResponse200) & {
+  headers: Headers;
+};
+export type updateGoalAttachmentResponseError = (updateGoalAttachmentResponse400 | updateGoalAttachmentResponse404) & {
+  headers: Headers;
+};
+
+export type updateGoalAttachmentResponse = (updateGoalAttachmentResponseSuccess | updateGoalAttachmentResponseError)
+
+export const getUpdateGoalAttachmentUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-attachments/${id}`
+}
+
+export const updateGoalAttachment = async (id: number,
+    updateGoalAttachmentBody: UpdateGoalAttachmentBody, options?: RequestInit): Promise<updateGoalAttachmentResponse> => {
+  
+  return generatedFetch<updateGoalAttachmentResponse>(getUpdateGoalAttachmentUrl(id),
+  {      
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateGoalAttachmentBody,)
+  }
+);}
+
+
+
+export type deleteGoalAttachmentResponse204 = {
+  data: DeleteGoalAttachment204
+  status: 204
+}
+
+export type deleteGoalAttachmentResponse404 = {
+  data: DeleteGoalAttachment404
+  status: 404
+}
+    
+export type deleteGoalAttachmentResponseSuccess = (deleteGoalAttachmentResponse204) & {
+  headers: Headers;
+};
+export type deleteGoalAttachmentResponseError = (deleteGoalAttachmentResponse404) & {
+  headers: Headers;
+};
+
+export type deleteGoalAttachmentResponse = (deleteGoalAttachmentResponseSuccess | deleteGoalAttachmentResponseError)
+
+export const getDeleteGoalAttachmentUrl = (id: number,) => {
+
+
+  
+
+  return `/api/goal-attachments/${id}`
+}
+
+export const deleteGoalAttachment = async (id: number, options?: RequestInit): Promise<deleteGoalAttachmentResponse> => {
+  
+  return generatedFetch<deleteGoalAttachmentResponse>(getDeleteGoalAttachmentUrl(id),
+  {      
+    ...options,
+    method: 'DELETE'
+    
+    
+  }
+);}
+
+
+
+export type previewGoalLinkResponse200 = {
+  data: PreviewGoalLink200
+  status: 200
+}
+
+export type previewGoalLinkResponse400 = {
+  data: PreviewGoalLink400
   status: 400
 }
     
-export type updateGoalSettingsResponseSuccess = (updateGoalSettingsResponse200) & {
+export type previewGoalLinkResponseSuccess = (previewGoalLinkResponse200) & {
   headers: Headers;
 };
-export type updateGoalSettingsResponseError = (updateGoalSettingsResponse400) & {
+export type previewGoalLinkResponseError = (previewGoalLinkResponse400) & {
   headers: Headers;
 };
 
-export type updateGoalSettingsResponse = (updateGoalSettingsResponseSuccess | updateGoalSettingsResponseError)
+export type previewGoalLinkResponse = (previewGoalLinkResponseSuccess | previewGoalLinkResponseError)
 
-export const getUpdateGoalSettingsUrl = () => {
+export const getPreviewGoalLinkUrl = () => {
 
 
   
 
-  return `/api/goals/settings`
+  return `/api/goals/link-preview`
 }
 
-export const updateGoalSettings = async (updateGoalSettingsBody: UpdateGoalSettingsBody, options?: RequestInit): Promise<updateGoalSettingsResponse> => {
+export const previewGoalLink = async (previewGoalLinkBody: PreviewGoalLinkBody, options?: RequestInit): Promise<previewGoalLinkResponse> => {
   
-  return generatedFetch<updateGoalSettingsResponse>(getUpdateGoalSettingsUrl(),
+  return generatedFetch<previewGoalLinkResponse>(getPreviewGoalLinkUrl(),
   {      
     ...options,
-    method: 'PUT',
+    method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      updateGoalSettingsBody,)
+      previewGoalLinkBody,)
   }
 );}
 
@@ -33299,6 +35031,39 @@ export const runDatabaseBackup = async ( options?: RequestInit): Promise<runData
   {      
     ...options,
     method: 'POST'
+    
+    
+  }
+);}
+
+
+
+export type serveGoalLinkImageResponse404 = {
+  data: ServeGoalLinkImage404
+  status: 404
+}
+    
+;
+export type serveGoalLinkImageResponseError = (serveGoalLinkImageResponse404) & {
+  headers: Headers;
+};
+
+export type serveGoalLinkImageResponse = (serveGoalLinkImageResponseError)
+
+export const getServeGoalLinkImageUrl = (path: string,) => {
+
+
+  
+
+  return `/api/goal-link-images/${path}`
+}
+
+export const serveGoalLinkImage = async (path: string, options?: RequestInit): Promise<serveGoalLinkImageResponse> => {
+  
+  return generatedFetch<serveGoalLinkImageResponse>(getServeGoalLinkImageUrl(path),
+  {      
+    ...options,
+    method: 'GET'
     
     
   }

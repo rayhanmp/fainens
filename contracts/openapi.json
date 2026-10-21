@@ -10849,6 +10849,10 @@
                           "monthlyAmount": {
                             "type": "number"
                           },
+                          "monthlyPercent": {
+                            "nullable": true,
+                            "type": "number"
+                          },
                           "status": {
                             "type": "string",
                             "enum": [
@@ -10856,6 +10860,9 @@
                               "done",
                               "archived"
                             ]
+                          },
+                          "paused": {
+                            "type": "boolean"
                           },
                           "wishlistId": {
                             "nullable": true,
@@ -10878,11 +10885,69 @@
                             "minimum": -9007199254740991,
                             "maximum": 9007199254740991
                           },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "linkUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "linkTitle": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "linkImage": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "expectedReturn": {
+                            "type": "number"
+                          },
+                          "recurrence": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "yearly"
+                            ]
+                          },
+                          "categoryId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "categorySince": {
+                            "nullable": true,
+                            "type": "number"
+                          },
                           "setAside": {
                             "type": "number"
                           },
                           "setAsideThisMonth": {
                             "type": "number"
+                          },
+                          "reachMonths": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "coverAttachmentId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -10892,16 +10957,37 @@
                           "byDate",
                           "kind",
                           "monthlyAmount",
+                          "monthlyPercent",
                           "status",
+                          "paused",
                           "wishlistId",
                           "spentTransactionId",
                           "doneAt",
                           "sortOrder",
+                          "icon",
+                          "description",
+                          "linkUrl",
+                          "linkTitle",
+                          "linkImage",
+                          "accountId",
+                          "expectedReturn",
+                          "recurrence",
+                          "categoryId",
+                          "categorySince",
                           "setAside",
-                          "setAsideThisMonth"
+                          "setAsideThisMonth",
+                          "reachMonths",
+                          "coverAttachmentId"
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "salary": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "autoFundOnPayday": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -10909,7 +10995,9 @@
                     "setAside",
                     "unassigned",
                     "accounts",
-                    "goals"
+                    "goals",
+                    "salary",
+                    "autoFundOnPayday"
                   ],
                   "additionalProperties": false
                 }
@@ -10958,7 +11046,71 @@
                     "minimum": 0,
                     "maximum": 10000000000000
                   },
+                  "monthlyPercent": {
+                    "nullable": true,
+                    "type": "number",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 100
+                  },
                   "wishlistId": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 16
+                  },
+                  "description": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 20000
+                  },
+                  "linkUrl": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 2000,
+                    "format": "uri"
+                  },
+                  "linkTitle": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "linkImage": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 300,
+                    "pattern": "^wishlist-images\\/[A-Za-z0-9._-]+$"
+                  },
+                  "accountId": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "expectedReturn": {
+                    "type": "number",
+                    "minimum": -20,
+                    "maximum": 50
+                  },
+                  "recurrence": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "yearly"
+                    ]
+                  },
+                  "categoryId": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "categorySince": {
                     "nullable": true,
                     "type": "integer",
                     "exclusiveMinimum": true,
@@ -11012,6 +11164,10 @@
                     "monthlyAmount": {
                       "type": "number"
                     },
+                    "monthlyPercent": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "status": {
                       "type": "string",
                       "enum": [
@@ -11019,6 +11175,9 @@
                         "done",
                         "archived"
                       ]
+                    },
+                    "paused": {
+                      "type": "boolean"
                     },
                     "wishlistId": {
                       "nullable": true,
@@ -11041,11 +11200,69 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkTitle": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkImage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "expectedReturn": {
+                      "type": "number"
+                    },
+                    "recurrence": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "yearly"
+                      ]
+                    },
+                    "categoryId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "categorySince": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "setAside": {
                       "type": "number"
                     },
                     "setAsideThisMonth": {
                       "type": "number"
+                    },
+                    "reachMonths": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "coverAttachmentId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -11055,13 +11272,27 @@
                     "byDate",
                     "kind",
                     "monthlyAmount",
+                    "monthlyPercent",
                     "status",
+                    "paused",
                     "wishlistId",
                     "spentTransactionId",
                     "doneAt",
                     "sortOrder",
+                    "icon",
+                    "description",
+                    "linkUrl",
+                    "linkTitle",
+                    "linkImage",
+                    "accountId",
+                    "expectedReturn",
+                    "recurrence",
+                    "categoryId",
+                    "categorySince",
                     "setAside",
-                    "setAsideThisMonth"
+                    "setAsideThisMonth",
+                    "reachMonths",
+                    "coverAttachmentId"
                   ],
                   "additionalProperties": false
                 }
@@ -11109,7 +11340,1030 @@
         }
       }
     },
+    "/api/goals/order": {
+      "put": {
+        "operationId": "reorderGoals",
+        "tags": [
+          "goals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                },
+                "required": [
+                  "ids"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "available": {
+                      "type": "number"
+                    },
+                    "setAside": {
+                      "type": "number"
+                    },
+                    "unassigned": {
+                      "type": "number"
+                    },
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "liquidityClass": {
+                            "type": "string"
+                          },
+                          "balance": {
+                            "type": "number"
+                          },
+                          "included": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "liquidityClass",
+                          "balance",
+                          "included"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "goals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "targetAmount": {
+                            "type": "number"
+                          },
+                          "byDate": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "spend",
+                              "keep"
+                            ]
+                          },
+                          "monthlyAmount": {
+                            "type": "number"
+                          },
+                          "monthlyPercent": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "done",
+                              "archived"
+                            ]
+                          },
+                          "paused": {
+                            "type": "boolean"
+                          },
+                          "wishlistId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "spentTransactionId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "doneAt": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "sortOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "linkUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "linkTitle": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "linkImage": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "expectedReturn": {
+                            "type": "number"
+                          },
+                          "recurrence": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "yearly"
+                            ]
+                          },
+                          "categoryId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "categorySince": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "setAside": {
+                            "type": "number"
+                          },
+                          "setAsideThisMonth": {
+                            "type": "number"
+                          },
+                          "reachMonths": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "coverAttachmentId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "targetAmount",
+                          "byDate",
+                          "kind",
+                          "monthlyAmount",
+                          "monthlyPercent",
+                          "status",
+                          "paused",
+                          "wishlistId",
+                          "spentTransactionId",
+                          "doneAt",
+                          "sortOrder",
+                          "icon",
+                          "description",
+                          "linkUrl",
+                          "linkTitle",
+                          "linkImage",
+                          "accountId",
+                          "expectedReturn",
+                          "recurrence",
+                          "categoryId",
+                          "categorySince",
+                          "setAside",
+                          "setAsideThisMonth",
+                          "reachMonths",
+                          "coverAttachmentId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "salary": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "autoFundOnPayday": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "available",
+                    "setAside",
+                    "unassigned",
+                    "accounts",
+                    "goals",
+                    "salary",
+                    "autoFundOnPayday"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goals/fund-monthly": {
+      "post": {
+        "operationId": "fundGoalsMonthly",
+        "tags": [
+          "goals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "goalIds": {
+                    "nullable": true,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "assigned": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "goalId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "amount": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "goalId",
+                          "amount"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "total": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "assigned",
+                    "total"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goals/settings": {
+      "put": {
+        "operationId": "updateGoalSettings",
+        "tags": [
+          "goals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "excludedAccountIds": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "exclusiveMinimum": true,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "autoFundOnPayday": {
+                    "type": "boolean"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "available": {
+                      "type": "number"
+                    },
+                    "setAside": {
+                      "type": "number"
+                    },
+                    "unassigned": {
+                      "type": "number"
+                    },
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "liquidityClass": {
+                            "type": "string"
+                          },
+                          "balance": {
+                            "type": "number"
+                          },
+                          "included": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "liquidityClass",
+                          "balance",
+                          "included"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "goals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "targetAmount": {
+                            "type": "number"
+                          },
+                          "byDate": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "spend",
+                              "keep"
+                            ]
+                          },
+                          "monthlyAmount": {
+                            "type": "number"
+                          },
+                          "monthlyPercent": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "done",
+                              "archived"
+                            ]
+                          },
+                          "paused": {
+                            "type": "boolean"
+                          },
+                          "wishlistId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "spentTransactionId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "doneAt": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "sortOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "description": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "linkUrl": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "linkTitle": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "linkImage": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "accountId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "expectedReturn": {
+                            "type": "number"
+                          },
+                          "recurrence": {
+                            "type": "string",
+                            "enum": [
+                              "none",
+                              "yearly"
+                            ]
+                          },
+                          "categoryId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "categorySince": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "setAside": {
+                            "type": "number"
+                          },
+                          "setAsideThisMonth": {
+                            "type": "number"
+                          },
+                          "reachMonths": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "coverAttachmentId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "targetAmount",
+                          "byDate",
+                          "kind",
+                          "monthlyAmount",
+                          "monthlyPercent",
+                          "status",
+                          "paused",
+                          "wishlistId",
+                          "spentTransactionId",
+                          "doneAt",
+                          "sortOrder",
+                          "icon",
+                          "description",
+                          "linkUrl",
+                          "linkTitle",
+                          "linkImage",
+                          "accountId",
+                          "expectedReturn",
+                          "recurrence",
+                          "categoryId",
+                          "categorySince",
+                          "setAside",
+                          "setAsideThisMonth",
+                          "reachMonths",
+                          "coverAttachmentId"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "salary": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "autoFundOnPayday": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "available",
+                    "setAside",
+                    "unassigned",
+                    "accounts",
+                    "goals",
+                    "salary",
+                    "autoFundOnPayday"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/goals/{id}": {
+      "get": {
+        "operationId": "getGoal",
+        "tags": [
+          "goals"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "goal": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "targetAmount": {
+                          "type": "number"
+                        },
+                        "byDate": {
+                          "nullable": true,
+                          "type": "number"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "spend",
+                            "keep"
+                          ]
+                        },
+                        "monthlyAmount": {
+                          "type": "number"
+                        },
+                        "monthlyPercent": {
+                          "nullable": true,
+                          "type": "number"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "active",
+                            "done",
+                            "archived"
+                          ]
+                        },
+                        "paused": {
+                          "type": "boolean"
+                        },
+                        "wishlistId": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "spentTransactionId": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "doneAt": {
+                          "nullable": true,
+                          "type": "number"
+                        },
+                        "sortOrder": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "icon": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "description": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "linkUrl": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "linkTitle": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "linkImage": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "accountId": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "expectedReturn": {
+                          "type": "number"
+                        },
+                        "recurrence": {
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "yearly"
+                          ]
+                        },
+                        "categoryId": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "categorySince": {
+                          "nullable": true,
+                          "type": "number"
+                        },
+                        "setAside": {
+                          "type": "number"
+                        },
+                        "setAsideThisMonth": {
+                          "type": "number"
+                        },
+                        "reachMonths": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "coverAttachmentId": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "targetAmount",
+                        "byDate",
+                        "kind",
+                        "monthlyAmount",
+                        "monthlyPercent",
+                        "status",
+                        "paused",
+                        "wishlistId",
+                        "spentTransactionId",
+                        "doneAt",
+                        "sortOrder",
+                        "icon",
+                        "description",
+                        "linkUrl",
+                        "linkTitle",
+                        "linkImage",
+                        "accountId",
+                        "expectedReturn",
+                        "recurrence",
+                        "categoryId",
+                        "categorySince",
+                        "setAside",
+                        "setAsideThisMonth",
+                        "reachMonths",
+                        "coverAttachmentId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "parts": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "goalId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "number"
+                          },
+                          "paidAt": {
+                            "nullable": true,
+                            "type": "number"
+                          },
+                          "transactionId": {
+                            "nullable": true,
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "sortOrder": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "goalId",
+                          "name",
+                          "amount",
+                          "paidAt",
+                          "transactionId",
+                          "sortOrder"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "attachments": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "goalId": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "filename": {
+                            "type": "string"
+                          },
+                          "mimetype": {
+                            "type": "string"
+                          },
+                          "fileSize": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "isCover": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "goalId",
+                          "filename",
+                          "mimetype",
+                          "fileSize",
+                          "isCover",
+                          "createdAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "milestones": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "share": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "at": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "share",
+                          "at"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "streak": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "account": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "balance": {
+                          "type": "number"
+                        },
+                        "goalsHold": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name",
+                        "balance",
+                        "goalsHold"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "categoryName": {
+                      "nullable": true,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "goal",
+                    "parts",
+                    "attachments",
+                    "milestones",
+                    "streak",
+                    "account",
+                    "categoryName"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "operationId": "updateGoal",
         "tags": [
@@ -11150,7 +12404,71 @@
                     "minimum": 0,
                     "maximum": 10000000000000
                   },
+                  "monthlyPercent": {
+                    "nullable": true,
+                    "type": "number",
+                    "minimum": 0,
+                    "exclusiveMinimum": true,
+                    "maximum": 100
+                  },
                   "wishlistId": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "icon": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 16
+                  },
+                  "description": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 20000
+                  },
+                  "linkUrl": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 2000,
+                    "format": "uri"
+                  },
+                  "linkTitle": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "linkImage": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 300,
+                    "pattern": "^wishlist-images\\/[A-Za-z0-9._-]+$"
+                  },
+                  "accountId": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "expectedReturn": {
+                    "type": "number",
+                    "minimum": -20,
+                    "maximum": 50
+                  },
+                  "recurrence": {
+                    "type": "string",
+                    "enum": [
+                      "none",
+                      "yearly"
+                    ]
+                  },
+                  "categoryId": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "categorySince": {
                     "nullable": true,
                     "type": "integer",
                     "exclusiveMinimum": true,
@@ -11162,6 +12480,9 @@
                       "active",
                       "archived"
                     ]
+                  },
+                  "paused": {
+                    "type": "boolean"
                   },
                   "sortOrder": {
                     "type": "integer",
@@ -11219,6 +12540,10 @@
                     "monthlyAmount": {
                       "type": "number"
                     },
+                    "monthlyPercent": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "status": {
                       "type": "string",
                       "enum": [
@@ -11226,6 +12551,9 @@
                         "done",
                         "archived"
                       ]
+                    },
+                    "paused": {
+                      "type": "boolean"
                     },
                     "wishlistId": {
                       "nullable": true,
@@ -11248,11 +12576,69 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkTitle": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkImage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "expectedReturn": {
+                      "type": "number"
+                    },
+                    "recurrence": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "yearly"
+                      ]
+                    },
+                    "categoryId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "categorySince": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "setAside": {
                       "type": "number"
                     },
                     "setAsideThisMonth": {
                       "type": "number"
+                    },
+                    "reachMonths": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "coverAttachmentId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -11262,13 +12648,27 @@
                     "byDate",
                     "kind",
                     "monthlyAmount",
+                    "monthlyPercent",
                     "status",
+                    "paused",
                     "wishlistId",
                     "spentTransactionId",
                     "doneAt",
                     "sortOrder",
+                    "icon",
+                    "description",
+                    "linkUrl",
+                    "linkTitle",
+                    "linkImage",
+                    "accountId",
+                    "expectedReturn",
+                    "recurrence",
+                    "categoryId",
+                    "categorySince",
                     "setAside",
-                    "setAsideThisMonth"
+                    "setAsideThisMonth",
+                    "reachMonths",
+                    "coverAttachmentId"
                   ],
                   "additionalProperties": false
                 }
@@ -11427,6 +12827,12 @@
                         "nullable": true,
                         "type": "string"
                       },
+                      "partId": {
+                        "nullable": true,
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
                       "createdAt": {
                         "type": "number"
                       }
@@ -11439,6 +12845,7 @@
                       "note",
                       "transactionId",
                       "transactionDescription",
+                      "partId",
                       "createdAt"
                     ],
                     "additionalProperties": false
@@ -11525,6 +12932,10 @@
                     "monthlyAmount": {
                       "type": "number"
                     },
+                    "monthlyPercent": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "status": {
                       "type": "string",
                       "enum": [
@@ -11532,6 +12943,9 @@
                         "done",
                         "archived"
                       ]
+                    },
+                    "paused": {
+                      "type": "boolean"
                     },
                     "wishlistId": {
                       "nullable": true,
@@ -11554,11 +12968,69 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkTitle": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkImage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "expectedReturn": {
+                      "type": "number"
+                    },
+                    "recurrence": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "yearly"
+                      ]
+                    },
+                    "categoryId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "categorySince": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "setAside": {
                       "type": "number"
                     },
                     "setAsideThisMonth": {
                       "type": "number"
+                    },
+                    "reachMonths": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "coverAttachmentId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -11568,13 +13040,311 @@
                     "byDate",
                     "kind",
                     "monthlyAmount",
+                    "monthlyPercent",
                     "status",
+                    "paused",
                     "wishlistId",
                     "spentTransactionId",
                     "doneAt",
                     "sortOrder",
+                    "icon",
+                    "description",
+                    "linkUrl",
+                    "linkTitle",
+                    "linkImage",
+                    "accountId",
+                    "expectedReturn",
+                    "recurrence",
+                    "categoryId",
+                    "categorySince",
                     "setAside",
-                    "setAsideThisMonth"
+                    "setAsideThisMonth",
+                    "reachMonths",
+                    "coverAttachmentId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goals/{id}/spend": {
+      "post": {
+        "operationId": "spendFromGoal",
+        "tags": [
+          "goals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000000000
+                  },
+                  "transactionId": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "partId": {
+                    "nullable": true,
+                    "type": "integer",
+                    "exclusiveMinimum": true,
+                    "maximum": 9007199254740991
+                  },
+                  "note": {
+                    "nullable": true,
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "amount"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "targetAmount": {
+                      "type": "number"
+                    },
+                    "byDate": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "spend",
+                        "keep"
+                      ]
+                    },
+                    "monthlyAmount": {
+                      "type": "number"
+                    },
+                    "monthlyPercent": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "active",
+                        "done",
+                        "archived"
+                      ]
+                    },
+                    "paused": {
+                      "type": "boolean"
+                    },
+                    "wishlistId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "spentTransactionId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "doneAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "sortOrder": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkTitle": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkImage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "expectedReturn": {
+                      "type": "number"
+                    },
+                    "recurrence": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "yearly"
+                      ]
+                    },
+                    "categoryId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "categorySince": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "setAside": {
+                      "type": "number"
+                    },
+                    "setAsideThisMonth": {
+                      "type": "number"
+                    },
+                    "reachMonths": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "coverAttachmentId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "targetAmount",
+                    "byDate",
+                    "kind",
+                    "monthlyAmount",
+                    "monthlyPercent",
+                    "status",
+                    "paused",
+                    "wishlistId",
+                    "spentTransactionId",
+                    "doneAt",
+                    "sortOrder",
+                    "icon",
+                    "description",
+                    "linkUrl",
+                    "linkTitle",
+                    "linkImage",
+                    "accountId",
+                    "expectedReturn",
+                    "recurrence",
+                    "categoryId",
+                    "categorySince",
+                    "setAside",
+                    "setAsideThisMonth",
+                    "reachMonths",
+                    "coverAttachmentId"
                   ],
                   "additionalProperties": false
                 }
@@ -11711,6 +13481,10 @@
                     "monthlyAmount": {
                       "type": "number"
                     },
+                    "monthlyPercent": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "status": {
                       "type": "string",
                       "enum": [
@@ -11718,6 +13492,9 @@
                         "done",
                         "archived"
                       ]
+                    },
+                    "paused": {
+                      "type": "boolean"
                     },
                     "wishlistId": {
                       "nullable": true,
@@ -11740,11 +13517,69 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkTitle": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkImage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "expectedReturn": {
+                      "type": "number"
+                    },
+                    "recurrence": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "yearly"
+                      ]
+                    },
+                    "categoryId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "categorySince": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "setAside": {
                       "type": "number"
                     },
                     "setAsideThisMonth": {
                       "type": "number"
+                    },
+                    "reachMonths": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "coverAttachmentId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -11754,13 +13589,27 @@
                     "byDate",
                     "kind",
                     "monthlyAmount",
+                    "monthlyPercent",
                     "status",
+                    "paused",
                     "wishlistId",
                     "spentTransactionId",
                     "doneAt",
                     "sortOrder",
+                    "icon",
+                    "description",
+                    "linkUrl",
+                    "linkTitle",
+                    "linkImage",
+                    "accountId",
+                    "expectedReturn",
+                    "recurrence",
+                    "categoryId",
+                    "categorySince",
                     "setAside",
-                    "setAsideThisMonth"
+                    "setAsideThisMonth",
+                    "reachMonths",
+                    "coverAttachmentId"
                   ],
                   "additionalProperties": false
                 }
@@ -11878,6 +13727,10 @@
                     "monthlyAmount": {
                       "type": "number"
                     },
+                    "monthlyPercent": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "status": {
                       "type": "string",
                       "enum": [
@@ -11885,6 +13738,9 @@
                         "done",
                         "archived"
                       ]
+                    },
+                    "paused": {
+                      "type": "boolean"
                     },
                     "wishlistId": {
                       "nullable": true,
@@ -11907,11 +13763,69 @@
                       "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     },
+                    "icon": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "description": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkUrl": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkTitle": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "linkImage": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "accountId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "expectedReturn": {
+                      "type": "number"
+                    },
+                    "recurrence": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "yearly"
+                      ]
+                    },
+                    "categoryId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "categorySince": {
+                      "nullable": true,
+                      "type": "number"
+                    },
                     "setAside": {
                       "type": "number"
                     },
                     "setAsideThisMonth": {
                       "type": "number"
+                    },
+                    "reachMonths": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "coverAttachmentId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -11921,13 +13835,27 @@
                     "byDate",
                     "kind",
                     "monthlyAmount",
+                    "monthlyPercent",
                     "status",
+                    "paused",
                     "wishlistId",
                     "spentTransactionId",
                     "doneAt",
                     "sortOrder",
+                    "icon",
+                    "description",
+                    "linkUrl",
+                    "linkTitle",
+                    "linkImage",
+                    "accountId",
+                    "expectedReturn",
+                    "recurrence",
+                    "categoryId",
+                    "categorySince",
                     "setAside",
-                    "setAsideThisMonth"
+                    "setAsideThisMonth",
+                    "reachMonths",
+                    "coverAttachmentId"
                   ],
                   "additionalProperties": false
                 }
@@ -11956,9 +13884,9 @@
         }
       }
     },
-    "/api/goals/fund-monthly": {
+    "/api/goals/{id}/parts": {
       "post": {
-        "operationId": "fundGoalsMonthly",
+        "operationId": "addGoalPart",
         "tags": [
           "goals"
         ],
@@ -11969,15 +13897,163 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "goalIds": {
-                    "nullable": true,
-                    "maxItems": 200,
-                    "type": "array",
-                    "items": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000000000
+                  }
+                },
+                "required": [
+                  "name",
+                  "amount"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
                       "type": "integer",
-                      "exclusiveMinimum": true,
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "goalId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "number"
+                    },
+                    "paidAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "transactionId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "sortOrder": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
                       "maximum": 9007199254740991
                     }
+                  },
+                  "required": [
+                    "id",
+                    "goalId",
+                    "name",
+                    "amount",
+                    "paidAt",
+                    "transactionId",
+                    "sortOrder"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goal-parts/{id}": {
+      "patch": {
+        "operationId": "updateGoalPart",
+        "tags": [
+          "goals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10000000000000
+                  },
+                  "paid": {
+                    "type": "boolean"
+                  },
+                  "sortOrder": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
                   }
                 },
                 "additionalProperties": false
@@ -11985,6 +14061,18 @@
             }
           }
         },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -11993,36 +14081,139 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "assigned": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "goalId": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "amount": {
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "goalId",
-                          "amount"
-                        ],
-                        "additionalProperties": false
-                      }
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     },
-                    "total": {
+                    "goalId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "amount": {
                       "type": "number"
+                    },
+                    "paidAt": {
+                      "nullable": true,
+                      "type": "number"
+                    },
+                    "transactionId": {
+                      "nullable": true,
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "sortOrder": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
-                    "assigned",
-                    "total"
+                    "id",
+                    "goalId",
+                    "name",
+                    "amount",
+                    "paidAt",
+                    "transactionId",
+                    "sortOrder"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteGoalPart",
+        "tags": [
+          "goals"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "nullable": true,
+                  "enum": [
+                    null
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
                 }
               }
             }
@@ -12030,9 +14221,9 @@
         }
       }
     },
-    "/api/goals/settings": {
-      "put": {
-        "operationId": "updateGoalSettings",
+    "/api/goals/{id}/attachments": {
+      "post": {
+        "operationId": "uploadGoalAttachment",
         "tags": [
           "goals"
         ],
@@ -12043,18 +14234,404 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "excludedAccountIds": {
-                    "maxItems": 200,
-                    "type": "array",
-                    "items": {
-                      "type": "integer",
-                      "exclusiveMinimum": true,
-                      "maximum": 9007199254740991
-                    }
+                  "filename": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "enum": [
+                      "image/jpeg",
+                      "image/png",
+                      "image/webp",
+                      "image/gif",
+                      "application/pdf",
+                      "text/plain"
+                    ]
+                  },
+                  "data": {
+                    "type": "string",
+                    "minLength": 1
                   }
                 },
                 "required": [
-                  "excludedAccountIds"
+                  "filename",
+                  "contentType",
+                  "data"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "goalId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "filename": {
+                      "type": "string"
+                    },
+                    "mimetype": {
+                      "type": "string"
+                    },
+                    "fileSize": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "isCover": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "goalId",
+                    "filename",
+                    "mimetype",
+                    "fileSize",
+                    "isCover",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goal-attachments/{id}/file": {
+      "get": {
+        "operationId": "serveGoalAttachment",
+        "tags": [
+          "goals"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goal-attachments/{id}": {
+      "patch": {
+        "operationId": "updateGoalAttachment",
+        "tags": [
+          "goals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "isCover": {
+                    "type": "boolean"
+                  },
+                  "filename": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "goalId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "filename": {
+                      "type": "string"
+                    },
+                    "mimetype": {
+                      "type": "string"
+                    },
+                    "fileSize": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "isCover": {
+                      "type": "boolean"
+                    },
+                    "createdAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "goalId",
+                    "filename",
+                    "mimetype",
+                    "fileSize",
+                    "isCover",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteGoalAttachment",
+        "tags": [
+          "goals"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": true,
+              "maximum": 9007199254740991
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "nullable": true,
+                  "enum": [
+                    null
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goals/link-preview": {
+      "post": {
+        "operationId": "previewGoalLink",
+        "tags": [
+          "goals"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "format": "uri"
+                  }
+                },
+                "required": [
+                  "url"
                 ],
                 "additionalProperties": false
               }
@@ -12069,139 +14646,28 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "available": {
+                    "title": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "price": {
+                      "nullable": true,
                       "type": "number"
                     },
-                    "setAside": {
-                      "type": "number"
+                    "image": {
+                      "nullable": true,
+                      "type": "string"
                     },
-                    "unassigned": {
-                      "type": "number"
-                    },
-                    "accounts": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "liquidityClass": {
-                            "type": "string"
-                          },
-                          "balance": {
-                            "type": "number"
-                          },
-                          "included": {
-                            "type": "boolean"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "liquidityClass",
-                          "balance",
-                          "included"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "goals": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "targetAmount": {
-                            "type": "number"
-                          },
-                          "byDate": {
-                            "nullable": true,
-                            "type": "number"
-                          },
-                          "kind": {
-                            "type": "string",
-                            "enum": [
-                              "spend",
-                              "keep"
-                            ]
-                          },
-                          "monthlyAmount": {
-                            "type": "number"
-                          },
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "active",
-                              "done",
-                              "archived"
-                            ]
-                          },
-                          "wishlistId": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "spentTransactionId": {
-                            "nullable": true,
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "doneAt": {
-                            "nullable": true,
-                            "type": "number"
-                          },
-                          "sortOrder": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "setAside": {
-                            "type": "number"
-                          },
-                          "setAsideThisMonth": {
-                            "type": "number"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "targetAmount",
-                          "byDate",
-                          "kind",
-                          "monthlyAmount",
-                          "status",
-                          "wishlistId",
-                          "spentTransactionId",
-                          "doneAt",
-                          "sortOrder",
-                          "setAside",
-                          "setAsideThisMonth"
-                        ],
-                        "additionalProperties": false
-                      }
+                    "source": {
+                      "nullable": true,
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "available",
-                    "setAside",
-                    "unassigned",
-                    "accounts",
-                    "goals"
+                    "title",
+                    "price",
+                    "image",
+                    "source"
                   ],
                   "additionalProperties": false
                 }
@@ -45801,6 +48267,53 @@
             }
           },
           "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/goal-link-images/{path}": {
+      "get": {
+        "operationId": "serveGoalLinkImage",
+        "tags": [
+          "goals"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "*",
+            "required": true
+          },
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
             "description": "Default Response",
             "content": {
               "application/json": {

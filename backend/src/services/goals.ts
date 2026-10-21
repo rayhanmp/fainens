@@ -1,8 +1,10 @@
 import { and, asc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import { db as defaultDb } from "../db/client";
-import { accounts, goalAllocations, goalSettings, savingsGoals, wishlist } from "../db/schema";
+import { accounts, goalAllocations, goalAttachments, goalParts, goalSettings, savingsGoals, transactionCategoryAllocations, transactions, wishlist } from "../db/schema";
+import { monthsToReach } from "./goal-progress";
 import { computeAccountBalance } from "./ledger";
+import { previewSalaryPosting } from "./salary-posting";
 
 /**
  * Money set aside for goals. What you can set aside is the balance of your active cash, bank,
@@ -76,49 +78,164 @@ export type GoalView = {
   targetAmount: number;
   byDate: number | null;
   kind: GoalKind;
+  /** What it gets each month: the fixed amount, or its share of your latest salary. */
   monthlyAmount: number;
+  /** Set when the monthly amount is a share (%) of your latest salary. */
+  monthlyPercent: number | null;
   status: GoalStatus;
+  paused: boolean;
   wishlistId: number | null;
   spentTransactionId: number | null;
   doneAt: number | null;
   sortOrder: number;
+  icon: string | null;
+  description: string | null;
+  linkUrl: string | null;
+  linkTitle: string | null;
+  linkImage: string | null;
+  accountId: number | null;
+  expectedReturn: number;
+  recurrence: "none" | "yearly";
+  categoryId: number | null;
+  categorySince: number | null;
   setAside: number;
   /** Set aside this calendar month; counts toward the monthly amount. */
   setAsideThisMonth: number;
+  /** Months until it's reached at its monthly amount and return; 0 when it's there, null when never. */
+  reachMonths: number | null;
+  /** The cover picture among its files, if any. */
+  coverAttachmentId: number | null;
 };
 
 const time = (value: unknown) => (value instanceof Date ? value.getTime() : value == null ? null : Number(value));
 
-export function goalView(row: typeof savingsGoals.$inferSelect, setAside: number, thisMonth = 0): GoalView {
+/** A goal's monthly amount: fixed, or its share of the latest salary (to the nearest Rp1.000). */
+export function monthlyFor(row: Pick<typeof savingsGoals.$inferSelect, "monthlyAmount" | "monthlyPercent">, salary: number | null): number {
+  if (row.monthlyPercent != null && row.monthlyPercent > 0) return salary ? Math.round((salary * row.monthlyPercent) / 100 / 1000) * 1000 : 0;
+  return row.monthlyAmount;
+}
+
+export function goalView(row: typeof savingsGoals.$inferSelect, setAside: number, thisMonth = 0, extra: { salary?: number | null; coverAttachmentId?: number | null } = {}): GoalView {
+  const monthlyAmount = monthlyFor(row, extra.salary ?? null);
+  const paused = row.pausedAt != null;
+  const expectedReturn = row.expectedReturn ?? 0;
   return {
     id: row.id,
     name: row.name,
     targetAmount: row.targetAmount,
     byDate: time(row.byDate),
     kind: row.kind === "keep" ? "keep" : "spend",
-    monthlyAmount: row.monthlyAmount,
+    monthlyAmount,
+    monthlyPercent: row.monthlyPercent ?? null,
     status: row.status === "done" || row.status === "archived" ? row.status : "active",
+    paused,
     wishlistId: row.wishlistId ?? null,
     spentTransactionId: row.spentTransactionId ?? null,
     doneAt: time(row.doneAt),
     sortOrder: row.sortOrder,
+    icon: row.icon ?? null,
+    description: row.description ?? null,
+    linkUrl: row.linkUrl ?? null,
+    linkTitle: row.linkTitle ?? null,
+    linkImage: row.linkImage ?? null,
+    accountId: row.accountId ?? null,
+    expectedReturn,
+    recurrence: row.recurrence === "yearly" ? "yearly" : "none",
+    categoryId: row.categoryId ?? null,
+    categorySince: time(row.categorySince),
     setAside,
     setAsideThisMonth: thisMonth,
+    reachMonths: monthsToReach(setAside, row.targetAmount, paused ? 0 : monthlyAmount, expectedReturn),
+    coverAttachmentId: extra.coverAttachmentId ?? null,
   };
+}
+
+/** Your take-home pay as the salary settings work it out, or null when salary isn't set up. */
+export async function latestSalary(_dbLike: any = defaultDb): Promise<number | null> {
+  try {
+    const preview = await previewSalaryPosting();
+    return preview.netMonthly > 0 ? Math.round(preview.netMonthly) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pays a goal's expenses in its chosen category out of it: each posted expense in that category
+ * from `category_since` on gets one `category` entry taking up to what the goal holds. Entries
+ * whose expense was reversed, removed or no longer counts are dropped, so the money comes back.
+ * Matched on read because some ways of posting (CSV import, batch drafts) skip the shared hooks.
+ */
+export async function syncCategorySpending(dbLike: any = defaultDb) {
+  const goals = await dbLike.select().from(savingsGoals).where(eq(savingsGoals.status, "active"));
+  const existing = await dbLike
+    .select({ id: goalAllocations.id, goalId: goalAllocations.goalId, transactionId: goalAllocations.transactionId })
+    .from(goalAllocations)
+    .where(eq(goalAllocations.kind, "category"));
+  const active = new Map<number, typeof savingsGoals.$inferSelect>(goals.map((goal: typeof savingsGoals.$inferSelect) => [goal.id, goal]));
+  const keep = new Set<string>();
+  const wanted: Array<{ goalId: number; transactionId: number; amount: number; description: string }> = [];
+  for (const goal of goals as Array<typeof savingsGoals.$inferSelect>) {
+    if (goal.categoryId == null || goal.categorySince == null) continue;
+    const rows = await dbLike
+      .select({ transactionId: transactionCategoryAllocations.transactionId, amount: transactionCategoryAllocations.amount, description: transactions.description })
+      .from(transactionCategoryAllocations)
+      .innerJoin(transactions, eq(transactionCategoryAllocations.transactionId, transactions.id))
+      .where(and(eq(transactionCategoryAllocations.categoryId, goal.categoryId), eq(transactions.status, "posted"), gte(transactions.date, goal.categorySince), sql`${transactionCategoryAllocations.amount} > 0`));
+    for (const row of rows) {
+      keep.add(`${goal.id}:${row.transactionId}`);
+      wanted.push({ goalId: goal.id, transactionId: row.transactionId, amount: row.amount, description: row.description });
+    }
+  }
+  // Drop entries that no longer count; only for active goals, so a finished goal's history stays.
+  const stale = existing.filter((row: { id: number; goalId: number; transactionId: number | null }) => active.has(row.goalId) && (row.transactionId == null || !keep.has(`${row.goalId}:${row.transactionId}`)));
+  if (stale.length) await dbLike.delete(goalAllocations).where(inArray(goalAllocations.id, stale.map((row: { id: number }) => row.id)));
+  const done = new Set(existing.filter((row: { transactionId: number | null }) => row.transactionId != null).map((row: { goalId: number; transactionId: number }) => `${row.goalId}:${row.transactionId}`));
+  const fresh = wanted.filter((row) => !done.has(`${row.goalId}:${row.transactionId}`));
+  if (!fresh.length) return;
+  const held = await setAsideByGoal(dbLike);
+  for (const row of fresh) {
+    const holds = held.get(row.goalId) ?? 0;
+    const taken = Math.max(0, Math.min(row.amount, holds));
+    await dbLike.insert(goalAllocations).values({ goalId: row.goalId, amount: -taken, kind: "category", transactionId: row.transactionId, note: taken < row.amount ? `${row.description} (more than the goal had)` : row.description });
+    held.set(row.goalId, holds - taken);
+  }
+}
+
+/** After a salary posts: puts in every goal's monthly amount, when that's switched on. */
+export async function autoFundAfterPayday(dbLike: any = defaultDb) {
+  const settings = await goalSettingsRow(dbLike);
+  if (!settings.autoFundOnPayday) return null;
+  return fundMonthly(null, dbLike, "Payday");
+}
+
+/** Each goal's cover picture, by goal. */
+async function coverIds(dbLike: any): Promise<Map<number, number>> {
+  const rows = await dbLike.select({ id: goalAttachments.id, goalId: goalAttachments.goalId }).from(goalAttachments).where(eq(goalAttachments.isCover, true));
+  return new Map(rows.map((row: { id: number; goalId: number }) => [row.goalId, row.id]));
+}
+
+export async function goalSettingsRow(dbLike: any = defaultDb) {
+  const [row] = await dbLike.select().from(goalSettings).where(eq(goalSettings.id, 1)).limit(1);
+  return { excludedAccountIds: parseIds(row?.excludedAccountIds), autoFundOnPayday: Boolean(row?.autoFundOnPayday) };
 }
 
 /** Everything the Goals page shows: what you can set aside, what's set aside where, and what's left. */
 export async function goalsOverview(dbLike: any = defaultDb) {
-  const [accountRows, goalRows, held, thisMonth] = await Promise.all([
+  await syncCategorySpending(dbLike);
+  const [accountRows, goalRows, held, thisMonth, covers, salary, settings] = await Promise.all([
     liquidAccounts(dbLike),
     dbLike.select().from(savingsGoals).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id)),
     setAsideByGoal(dbLike),
     setAsideThisMonth(dbLike),
+    coverIds(dbLike),
+    latestSalary(dbLike),
+    goalSettingsRow(dbLike),
   ]);
-  const goals = (goalRows as Array<typeof savingsGoals.$inferSelect>).map((row) => goalView(row, held.get(row.id) ?? 0, thisMonth.get(row.id) ?? 0));
+  const goals = (goalRows as Array<typeof savingsGoals.$inferSelect>).map((row) => goalView(row, held.get(row.id) ?? 0, thisMonth.get(row.id) ?? 0, { salary, coverAttachmentId: covers.get(row.id) ?? null }));
   const available = accountRows.filter((account) => account.included).reduce((sum, account) => sum + account.balance, 0);
   const setAside = goals.filter((goal) => goal.status === "active").reduce((sum, goal) => sum + goal.setAside, 0);
-  return { available, setAside, unassigned: available - setAside, accounts: accountRows, goals };
+  return { available, setAside, unassigned: available - setAside, accounts: accountRows, goals, salary, autoFundOnPayday: settings.autoFundOnPayday };
 }
 
 export class GoalError extends Error {
@@ -145,8 +262,30 @@ export async function allocate(goalId: number, amount: number, note: string | nu
 }
 
 /**
+ * Pays part of a goal from its money, like the flights of a trip: the amount leaves the goal with a
+ * `spend` entry, optionally with the expense that paid it, and a part of its breakdown is ticked off.
+ */
+export async function spendFromGoal(goalId: number, input: { amount: number; transactionId: number | null; partId: number | null; note: string | null }, dbLike: any = defaultDb) {
+  if (!Number.isSafeInteger(input.amount) || input.amount <= 0) throw new GoalError("Enter an amount");
+  const [goal] = await dbLike.select().from(savingsGoals).where(eq(savingsGoals.id, goalId)).limit(1);
+  if (!goal) throw new GoalError("Goal not found", 404);
+  if (goal.status !== "active") throw new GoalError("Only an active goal can pay for something", 409);
+  const holds = (await setAsideByGoal(dbLike)).get(goalId) ?? 0;
+  if (input.amount > holds) throw new GoalError("A goal can't pay more than it holds", 409);
+  let part: typeof goalParts.$inferSelect | undefined;
+  if (input.partId != null) {
+    [part] = await dbLike.select().from(goalParts).where(and(eq(goalParts.id, input.partId), eq(goalParts.goalId, goalId))).limit(1);
+    if (!part) throw new GoalError("That part isn't on this goal");
+  }
+  const [created] = await dbLike.insert(goalAllocations).values({ goalId, amount: -input.amount, kind: "spend", transactionId: input.transactionId, partId: input.partId, note: input.note ?? (part ? `Paid: ${part.name}` : "Paid") }).returning();
+  if (part) await dbLike.update(goalParts).set({ paidAt: new Date(), transactionId: input.transactionId ?? part.transactionId }).where(eq(goalParts.id, part.id));
+  return created;
+}
+
+/**
  * Marks a goal bought or finished. Its money is released with a `spend` entry (for a spend goal
- * the purchase took it); a linked wishlist item is fulfilled with the same transaction.
+ * the purchase took it); a linked wishlist item is fulfilled with the same transaction. A yearly
+ * goal isn't finished: it starts again for the same date next year, its parts unticked.
  */
 export async function completeGoal(goalId: number, transactionId: number | null, dbLike: any = defaultDb) {
   const [goal] = await dbLike.select().from(savingsGoals).where(eq(savingsGoals.id, goalId)).limit(1);
@@ -156,6 +295,15 @@ export async function completeGoal(goalId: number, transactionId: number | null,
   const now = new Date();
   if (holds !== 0) {
     await dbLike.insert(goalAllocations).values({ goalId, amount: -holds, kind: "spend", transactionId, note: transactionId ? "Bought" : "Done" });
+  }
+  if (goal.recurrence === "yearly") {
+    const due = goal.byDate ? new Date(goal.byDate) : now;
+    // Next year's date, a year after this one (or after today, if this one is long past).
+    let next = new Date(due.getFullYear() + 1, due.getMonth(), due.getDate(), 12);
+    while (next.getTime() <= now.getTime()) next = new Date(next.getFullYear() + 1, next.getMonth(), next.getDate(), 12);
+    await dbLike.update(savingsGoals).set({ byDate: next, spentTransactionId: transactionId, updatedAt: now }).where(eq(savingsGoals.id, goalId));
+    await dbLike.update(goalParts).set({ paidAt: null, transactionId: null }).where(eq(goalParts.goalId, goalId));
+    return;
   }
   await dbLike.update(savingsGoals).set({ status: "done", doneAt: now, spentTransactionId: transactionId, updatedAt: now }).where(eq(savingsGoals.id, goalId));
   if (goal.wishlistId && transactionId) {
@@ -172,20 +320,20 @@ export async function completeGoalsForWishlist(wishlistId: number, transactionId
 }
 
 /**
- * Sets aside each active goal's planned monthly amount, less what it was already given this month,
- * as far as the unassigned money goes and no further than its target. Dated goals first, soonest first.
+ * Sets aside each active, unpaused goal's monthly amount, less what it was already given this
+ * month, as far as the unassigned money goes and no further than its target. Goals go in priority
+ * order, the top of the list first.
  */
-export async function fundMonthly(goalIds: number[] | null, dbLike: any = defaultDb) {
+export async function fundMonthly(goalIds: number[] | null, dbLike: any = defaultDb, note = "Monthly amount") {
   const overview = await goalsOverview(dbLike);
   let left = Math.max(0, overview.unassigned);
-  const due = overview.goals
-    .filter((goal) => goal.status === "active" && goal.monthlyAmount > 0 && (!goalIds || goalIds.includes(goal.id)))
-    .sort((a, b) => (a.byDate ?? Infinity) - (b.byDate ?? Infinity) || a.sortOrder - b.sortOrder);
+  // The overview is already in priority order.
+  const due = overview.goals.filter((goal) => goal.status === "active" && !goal.paused && goal.monthlyAmount > 0 && (!goalIds || goalIds.includes(goal.id)));
   const assigned: Array<{ goalId: number; amount: number }> = [];
   for (const goal of due) {
     const amount = Math.min(goal.monthlyAmount - goal.setAsideThisMonth, goal.targetAmount - goal.setAside, left);
     if (amount <= 0) continue;
-    await dbLike.insert(goalAllocations).values({ goalId: goal.id, amount, kind: "assign", note: "Monthly amount" });
+    await dbLike.insert(goalAllocations).values({ goalId: goal.id, amount, kind: "assign", note });
     assigned.push({ goalId: goal.id, amount });
     left -= amount;
   }

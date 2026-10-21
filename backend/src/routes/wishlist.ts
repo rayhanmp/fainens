@@ -64,7 +64,7 @@ const wishlistScrapeResponseSchema = z.object({ success: z.boolean(), data: z.un
  * - Must not be localhost or private ranges
  * - Domain must be in allowlist (optional, can be disabled)
  */
-function validateScrapeUrl(url: string): { valid: boolean; error?: string } {
+export function validateScrapeUrl(url: string): { valid: boolean; error?: string } {
   try {
     const parsed = new URL(url);
 

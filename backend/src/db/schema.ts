@@ -206,7 +206,8 @@ export const savingsPlans = sqliteTable("savings_plan", {
 /**
  * Something money is set aside for: its own pot inside the app. `kind` spend: bought when reached (the money leaves);
  * keep: an amount to hold, like an emergency fund. What's set aside is the sum of its allocations.
- * status: active | done (bought or finished) | archived.
+ * status: active | done (bought or finished) | archived; `paused_at` stops its monthly amount
+ * without archiving. `sort_order` is its priority: higher goals get money first.
  */
 export const savingsGoals = sqliteTable("savings_goal", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -216,18 +217,52 @@ export const savingsGoals = sqliteTable("savings_goal", {
   kind: text("kind").notNull().default("spend"),
   /** What you plan to set aside for it each period. */
   monthlyAmount: integer("monthly_amount").notNull().default(0),
+  /** When set, the monthly amount is this share (%) of your latest salary instead. */
+  monthlyPercent: real("monthly_percent"),
   status: text("status").notNull().default("active"),
   wishlistId: integer("wishlist_id").references(() => wishlist.id, { onDelete: "set null" }),
   spentTransactionId: integer("spent_transaction_id").references(() => transactions.id, { onDelete: "set null" }),
   doneAt: integer("done_at", { mode: "timestamp_ms" }),
   sortOrder: integer("sort_order").notNull().default(0),
+  /** An emoji shown with its name. */
+  icon: text("icon"),
+  /** Notes in markdown. */
+  description: text("description"),
+  /** A product or booking page, with the title and picture read from it. */
+  linkUrl: text("link_url"),
+  linkTitle: text("link_title"),
+  linkImage: text("link_image"),
+  /** The account or pocket its money really sits in, if you say. */
+  accountId: integer("account_id").references(() => accounts.id, { onDelete: "set null" }),
+  /** Yearly % its money earns where it sits (savings, SBN), for when it's reached. */
+  expectedReturn: real("expected_return").notNull().default(0),
+  /** none | yearly: a yearly goal starts again for next year once it's paid. */
+  recurrence: text("recurrence").notNull().default("none"),
+  pausedAt: integer("paused_at", { mode: "timestamp_ms" }),
+  /** Expenses in this category from `category_since` on are paid out of the goal. */
+  categoryId: integer("category_id").references(() => categories.id, { onDelete: "set null" }),
+  categorySince: integer("category_since", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
 });
 
+/** One part of a goal's cost, like the flights of a trip; ticked off when it's paid. */
+export const goalParts = sqliteTable("goal_part", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  amount: integer("amount").notNull(),
+  paidAt: integer("paid_at", { mode: "timestamp_ms" }),
+  transactionId: integer("transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  sortOrder: integer("sort_order").notNull().default(0),
+}, (table) => ({
+  goalIdx: index("idx_goal_part_goal").on(table.goalId),
+}));
+
 /**
- * Money moved onto (positive) or off (negative) a goal. kind: assign | release | spend (the goal
- * was bought, optionally with the transaction that paid it).
+ * Money moved onto (positive) or off (negative) a goal. kind: assign | release | spend (bought, or
+ * part of it paid, optionally with the transaction that paid it) | category (an expense in the
+ * goal's category, paid out of it automatically).
  */
 export const goalAllocations = sqliteTable("goal_allocation", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -236,15 +271,34 @@ export const goalAllocations = sqliteTable("goal_allocation", {
   kind: text("kind").notNull().default("assign"),
   note: text("note"),
   transactionId: integer("transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  partId: integer("part_id").references(() => goalParts.id, { onDelete: "set null" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
 }, (table) => ({
   goalIdx: index("idx_goal_allocation_goal").on(table.goalId),
 }));
 
-/** One row: which liquid accounts don't count as money you can set aside (JSON ids). */
+/** A file on a goal: a quote, brochure, booking or photo; one can be its cover. */
+export const goalAttachments = sqliteTable("goal_attachment", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  goalId: integer("goal_id").notNull().references(() => savingsGoals.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(),
+  r2Key: text("r2_key").notNull(),
+  mimetype: text("mimetype").notNull(),
+  fileSize: integer("file_size").notNull(),
+  isCover: integer("is_cover", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch('now') * 1000)`),
+}, (table) => ({
+  goalIdx: index("idx_goal_attachment_goal").on(table.goalId),
+}));
+
+/**
+ * One row: which liquid accounts don't count as money you can set aside (JSON ids), and whether
+ * posting your salary puts in every goal's monthly amount.
+ */
 export const goalSettings = sqliteTable("goal_settings", {
   id: integer("id").primaryKey(),
   excludedAccountIds: text("excluded_account_ids").notNull().default("[]"),
+  autoFundOnPayday: integer("auto_fund_on_payday", { mode: "boolean" }).notNull().default(false),
 });
 
 export const tags = sqliteTable("tag", {

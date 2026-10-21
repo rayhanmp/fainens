@@ -187,6 +187,14 @@ export async function postSalaryIfPayrollDay(
     affectedPeriodIds: periodId == null ? undefined : [periodId],
     revisionBumped: true,
   });
+  // Payday: goals get their monthly amounts when that's switched on. Imported late, as the goals
+  // service reads salary from here; a failure there never undoes the posted salary.
+  try {
+    const { autoFundAfterPayday } = await import("./goals");
+    await autoFundAfterPayday();
+  } catch (error) {
+    console.error("Could not put money into goals after payday", error);
+  }
   return {
     posted: true,
     transactionId,
