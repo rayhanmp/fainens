@@ -202,6 +202,38 @@ export async function syncCategorySpending(dbLike: any = defaultDb) {
   }
 }
 
+/**
+ * What happened to each goal over a period, for the monthly report: what went in, what was paid
+ * from it, what was taken back out, what it held at the end, and whether it was finished then.
+ * Goals with nothing in them and nothing happening are left out.
+ */
+export async function goalsForPeriod(startMs: number, endMs: number, dbLike: any = defaultDb) {
+  const goals = await dbLike.select().from(savingsGoals).orderBy(asc(savingsGoals.sortOrder), asc(savingsGoals.id));
+  const entries = await dbLike
+    .select({ goalId: goalAllocations.goalId, amount: goalAllocations.amount, kind: goalAllocations.kind, createdAt: goalAllocations.createdAt })
+    .from(goalAllocations);
+  return (goals as Array<typeof savingsGoals.$inferSelect>)
+    .filter((goal) => goal.createdAt.getTime() <= endMs)
+    .map((goal) => {
+      const own = entries.filter((entry: { goalId: number; createdAt: Date }) => entry.goalId === goal.id && entry.createdAt.getTime() <= endMs);
+      const inPeriod = own.filter((entry: { createdAt: Date }) => entry.createdAt.getTime() >= startMs);
+      const total = (rows: Array<{ amount: number }>) => rows.reduce((sum, row) => sum + row.amount, 0);
+      const doneAt = goal.doneAt ? goal.doneAt.getTime() : null;
+      return {
+        name: goal.name,
+        icon: goal.icon ?? null,
+        kind: goal.kind === "keep" ? "keep" : "spend",
+        targetAmount: goal.targetAmount,
+        putIn: total(inPeriod.filter((entry: { kind: string }) => entry.kind === "assign")),
+        paid: -total(inPeriod.filter((entry: { kind: string }) => entry.kind === "spend" || entry.kind === "category")),
+        takenOut: -total(inPeriod.filter((entry: { kind: string }) => entry.kind === "release")),
+        heldAtEnd: total(own),
+        finished: doneAt !== null && doneAt >= startMs && doneAt <= endMs,
+      };
+    })
+    .filter((goal) => goal.heldAtEnd !== 0 || goal.putIn !== 0 || goal.paid !== 0 || goal.takenOut !== 0 || goal.finished);
+}
+
 /** After a salary posts: puts in every goal's monthly amount, when that's switched on. */
 export async function autoFundAfterPayday(dbLike: any = defaultDb) {
   const settings = await goalSettingsRow(dbLike);

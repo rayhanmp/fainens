@@ -17,7 +17,7 @@ export function PanelHeader({ title, subtitle, action, className }: { title: str
   );
 }
 
-type PanelLinkTo = '/accounts' | '/budget' | '/loans' | '/paylater' | '/subscriptions' | '/transactions';
+type PanelLinkTo = '/accounts' | '/budget' | '/goals' | '/loans' | '/paylater' | '/subscriptions' | '/transactions';
 
 export function PanelLink({ to, children, className }: { to: PanelLinkTo; children: ReactNode; className?: string }) {
   return <Link to={to} className={cn(panelLink, className)}>{children} <ArrowRight className="h-4 w-4" aria-hidden /></Link>;

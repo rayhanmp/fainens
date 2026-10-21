@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { Activity, BarChart3, CalendarClock, Check, ChevronDown, List, PencilLine, PieChart, Plus, RotateCcw, SlidersHorizontal, TrendingUp, X } from 'lucide-react';
+import { Activity, BarChart3, CalendarClock, Check, ChevronDown, List, PencilLine, PieChart, Plus, RotateCcw, SlidersHorizontal, Target, TrendingUp, X } from 'lucide-react';
 import { applyDashboardPreset, dashboardPreset, dashboardSectionLabels, selectedDashboardPreset, type DashboardMetric, type DashboardPreset, type DashboardViewPreferences } from './view-preferences';
 
-const panelIcons = { budget: PieChart, payments: CalendarClock, activity: List, netWorth: TrendingUp, spending: BarChart3, pulse: Activity };
+const panelIcons = { budget: PieChart, payments: CalendarClock, activity: List, netWorth: TrendingUp, spending: BarChart3, pulse: Activity, goals: Target };
 
 export function DashboardViewMenu({ preferences, onChange, preset, onEditLayout }: { preferences: DashboardViewPreferences; onChange: (next: DashboardViewPreferences) => void; preset?: DashboardPreset; onEditLayout: () => void }) {
   const menuRef = useRef<HTMLDetailsElement>(null);

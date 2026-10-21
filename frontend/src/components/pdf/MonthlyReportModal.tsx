@@ -100,6 +100,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
         incomeBySource: monthly.incomeBySource,
         expensesByCategory: monthly.expensesByCategory,
         budgetComparison: monthly.budgetComparison,
+        goals: monthly.goals ?? [],
         revision: monthly.revision,
         provenance: monthly.provenance,
         allTransactions,
@@ -145,6 +146,7 @@ export function MonthlyReportModal({ isOpen, onClose }: MonthlyReportModalProps)
           incomeBySource={reportData.incomeBySource}
           expensesByCategory={reportData.expensesByCategory}
           budgetComparison={reportData.budgetComparison}
+          goals={reportData.goals}
           allTransactions={reportData.allTransactions}
           coverage={reportData.coverage}
           generatedAt={reportData.generatedAt}

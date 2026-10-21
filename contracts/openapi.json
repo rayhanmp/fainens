@@ -24577,6 +24577,58 @@
                         "includesDrafts"
                       ],
                       "additionalProperties": {}
+                    },
+                    "goals": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "icon": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "spend",
+                              "keep"
+                            ]
+                          },
+                          "targetAmount": {
+                            "type": "number"
+                          },
+                          "putIn": {
+                            "type": "number"
+                          },
+                          "paid": {
+                            "type": "number"
+                          },
+                          "takenOut": {
+                            "type": "number"
+                          },
+                          "heldAtEnd": {
+                            "type": "number"
+                          },
+                          "finished": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "icon",
+                          "kind",
+                          "targetAmount",
+                          "putIn",
+                          "paid",
+                          "takenOut",
+                          "heldAtEnd",
+                          "finished"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [

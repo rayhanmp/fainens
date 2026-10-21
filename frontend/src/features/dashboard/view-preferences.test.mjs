@@ -14,7 +14,7 @@ test('partial preferences keep the user order and add missing sections safely', 
     hiddenSections: ['pulse', 'pulse', 'old'], compact: true,
   }));
   assert.deepEqual(parsed, {
-    mainMetric: 'cash', sectionOrder: ['activity', 'payments', 'budget', 'netWorth', 'spending', 'pulse'],
+    mainMetric: 'cash', sectionOrder: ['activity', 'payments', 'budget', 'netWorth', 'spending', 'pulse', 'goals'],
     hiddenSections: ['pulse'], sectionSizes: {}, pulseMetrics: ['cashFlow', 'savingsRate', 'burn', 'runway'],
   });
 });
@@ -67,7 +67,7 @@ test('resizing survives storage and returning to the default restores its preset
 
 test('resize previews match the resulting grid, including the neighbour changing width', () => {
   const original = dashboardPreset('original');
-  assert.deepEqual(dashboardSectionRows(original), [['pulse'], ['netWorth', 'spending'], ['budget', 'activity']]);
+  assert.deepEqual(dashboardSectionRows(original), [['pulse'], ['netWorth', 'spending'], ['budget', 'activity'], ['goals']]);
   assert.equal(dashboardSectionWidth(original, 'netWorth', 1100, 20), 720);
   assert.equal(dashboardSectionWidth(original, 'spending', 1100, 20), 360);
   const small = resizeDashboardSection(original, 'netWorth', 'small');
@@ -75,7 +75,7 @@ test('resize previews match the resulting grid, including the neighbour changing
   assert.equal(dashboardSectionWidth(small, 'spending', 1100, 20), 540);
   const full = resizeDashboardSection(original, 'netWorth', 'full');
   assert.equal(dashboardSectionWidth(full, 'netWorth', 1100, 20), 1100);
-  assert.deepEqual(dashboardSectionRows(full), [['pulse'], ['netWorth'], ['spending', 'budget'], ['activity']]);
+  assert.deepEqual(dashboardSectionRows(full), [['pulse'], ['netWorth'], ['spending', 'budget'], ['activity', 'goals']]);
   const narrowPulse = resizeDashboardSection(original, 'pulse', 'small');
   assert.equal(dashboardSectionWidth(narrowPulse, 'pulse', 1100, 20), 360);
   assert.equal(dashboardSectionWidth(dashboardPreset('minimal'), 'activity', 1100, 20), 1100);
@@ -84,12 +84,12 @@ test('resize previews match the resulting grid, including the neighbour changing
 test('moving visible sections retains hidden sections and other preferences', () => {
   const original = dashboardPreset('everyday');
   const moved = moveDashboardSection(original, 'activity', 'budget');
-  assert.deepEqual(moved.sectionOrder, ['activity', 'budget', 'payments', 'netWorth', 'spending', 'pulse']);
+  assert.deepEqual(moved.sectionOrder, ['activity', 'budget', 'payments', 'netWorth', 'spending', 'pulse', 'goals']);
   assert.deepEqual(moved.hiddenSections, original.hiddenSections);
   assert.equal(moved.mainMetric, original.mainMetric);
   assert.equal(moveDashboardSection(original, 'budget', 'pulse'), original);
   assert.equal(moveDashboardSection(original, 'budget', 'budget'), original);
-  assert.deepEqual(moveDashboardSection(moved, 'activity', 'payments').sectionOrder, ['budget', 'payments', 'activity', 'netWorth', 'spending', 'pulse']);
+  assert.deepEqual(moveDashboardSection(moved, 'activity', 'payments').sectionOrder, ['budget', 'payments', 'activity', 'netWorth', 'spending', 'pulse', 'goals']);
 });
 
 test('layout reset restores order and widths while keeping metric and visibility', () => {

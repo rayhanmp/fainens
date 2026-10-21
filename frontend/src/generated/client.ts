@@ -11376,6 +11376,28 @@ export type GetMonthlyReport200Provenance = {
   [key: string]: unknown;
 };
 
+export type GetMonthlyReport200GoalsItemKind = typeof GetMonthlyReport200GoalsItemKind[keyof typeof GetMonthlyReport200GoalsItemKind];
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetMonthlyReport200GoalsItemKind = {
+  spend: 'spend',
+  keep: 'keep',
+} as const;
+
+export type GetMonthlyReport200GoalsItem = {
+  name: string;
+  /** @nullable */
+  icon: string | null;
+  kind: GetMonthlyReport200GoalsItemKind;
+  targetAmount: number;
+  putIn: number;
+  paid: number;
+  takenOut: number;
+  heldAtEnd: number;
+  finished: boolean;
+};
+
 export type GetMonthlyReport200 = {
   /**
    * @minimum -9007199254740991
@@ -11406,6 +11428,7 @@ export type GetMonthlyReport200 = {
   generatedAt: number;
   isTemporary: boolean;
   provenance: GetMonthlyReport200Provenance;
+  goals?: GetMonthlyReport200GoalsItem[];
   [key: string]: unknown;
 };
 

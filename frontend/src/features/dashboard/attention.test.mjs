@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { DAY_MS, upcomingCommitments } from './commitments.ts';
-import { attentionReadKey, attentionStripItems, buildAttentionItems, parseAttentionReadKeys, serializeAttentionReadKeys, ATTENTION_READ_STORAGE_LIMIT, ATTENTION_STRIP_LIMIT } from './attention.ts';
+import { attentionReadKey, attentionStripItems, buildAttentionItems, goalReminders, parseAttentionReadKeys, serializeAttentionReadKeys, ATTENTION_READ_STORAGE_LIMIT, ATTENTION_STRIP_LIMIT } from './attention.ts';
 
 const NOW = Date.UTC(2026, 9, 17, 12);
 const format = { amount: (cents) => `Rp${cents}`, date: (ms) => new Date(ms).toISOString().slice(0, 10) };
@@ -140,4 +140,30 @@ test('stored read keys keep only the most recent entries', () => {
   const stored = JSON.parse(serializeAttentionReadKeys(keys));
   assert.equal(stored.length, ATTENTION_READ_STORAGE_LIMIT);
   assert.equal(stored[0], 'k5|t');
+});
+
+test('goals remind you of this month’s amounts, goals that won’t make their date, and short accounts', () => {
+  const goal = { status: 'active', paused: false, setAsideThisMonth: 0, accountId: null, byDate: null, reachMonths: null };
+  const reminders = goalReminders({
+    unassigned: 3_000_000,
+    accounts: [{ id: 1, name: 'Jago', balance: 2_000_000 }, { id: 2, name: 'BCA', balance: 50_000_000 }],
+    goals: [
+      // Needed in 4 months, gets there in 10: 6 months late.
+      { ...goal, id: 1, name: 'Laptop', targetAmount: 20_000_000, setAside: 10_000_000, monthlyAmount: 1_000_000, byDate: Date.UTC(2027, 1, 20), reachMonths: 10 },
+      { ...goal, id: 2, name: 'Fund', targetAmount: 10_000_000, setAside: 5_000_000, monthlyAmount: 1_000_000, setAsideThisMonth: 400_000, accountId: 1 },
+      { ...goal, id: 3, name: 'Paused', paused: true, targetAmount: 9, setAside: 0, monthlyAmount: 5, byDate: Date.UTC(2026, 11, 1), reachMonths: null },
+    ],
+  }, NOW);
+  assert.equal(reminders.due, 1_600_000);
+  assert.deepEqual(reminders.late.map((item) => [item.name, item.months]), [['Laptop', 6]]);
+  assert.deepEqual(reminders.shortAccounts.map((item) => [item.name, item.goalsHold]), [['Jago', 5_000_000]]);
+
+  const items = buildAttentionItems(input({ goals: reminders }), format);
+  assert.deepEqual(items.filter((item) => item.to === '/goals').map((item) => [item.tone, item.title]), [
+    ['warning', 'Jago holds less than its goals'],
+    ['warning', 'Laptop won’t make its date'],
+    ['info', 'Rp1600000 to put into goals'],
+  ]);
+  // Nothing free, nothing to remind about putting in.
+  assert.equal(buildAttentionItems(input({ goals: { ...reminders, free: 0 } }), format).some((item) => item.id.startsWith('goals-due')), false);
 });

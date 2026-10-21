@@ -32,6 +32,7 @@ import { useNetWorthTrendQuery } from '../features/analytics/queries';
 import { useAgentProfileQuery, useFinancialFactsQuery } from '../features/agent/queries';
 import { usePendingTransactionsQuery } from '../features/transactions/queries';
 import { useGoalsQuery } from '../features/goals/queries';
+import { GoalsDashboardPanel } from '../features/dashboard/GoalsDashboardPanel';
 import { useUiStore } from '../stores/ui-store';
 import { DashboardViewMenu } from '../features/dashboard/DashboardViewMenu';
 import { DashboardSections } from '../features/dashboard/DashboardSections';
@@ -44,7 +45,7 @@ import { monthlySubscriptionCost, spentThroughDay, type PulseInputs, type PulseM
 import { BudgetPanel } from '../features/dashboard/BudgetPanel';
 import { ActivityPanel } from '../features/dashboard/ActivityPanel';
 import { PaymentsPanel } from '../features/dashboard/PaymentsPanel';
-import { buildAttentionItems, isTrackedCoverage } from '../features/dashboard/attention';
+import { buildAttentionItems, goalReminders, isTrackedCoverage } from '../features/dashboard/attention';
 import { budgetUsedRatio, periodPacing } from '../features/dashboard/pacing';
 import { upcomingCommitments } from '../features/dashboard/commitments';
 import { fallbackName, heroCopy, percentChange, timeOfDayGreeting } from '../features/dashboard/hero-copy';
@@ -217,6 +218,8 @@ function DashboardPage() {
     loans,
   }, dashboardNow), [dashboardNow, loans, paylater, subscriptions]);
 
+  // Goals feed the bell (what to put in, goals running late) and the pulse strip.
+  const goalsQuery = useGoalsQuery();
   const attentionItems = useMemo(() => buildAttentionItems({
     now: dashboardNow,
     pendingTransactionCount,
@@ -230,7 +233,8 @@ function DashboardPage() {
     payLaterObligations: paylater?.obligations ?? [],
     subscriptionRenewals: subscriptions?.renewalPreview.occurrences ?? [],
     commitments,
-  }, { amount: formatCurrency, date: formatDayMonth }), [analytics, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, dashboardNow, loans, paylater, pendingTransactionCount, reconciliation, subscriptions]);
+    goals: goalsQuery.data ? goalReminders(goalsQuery.data, dashboardNow) : null,
+  }, { amount: formatCurrency, date: formatDayMonth }), [analytics, commitments, currentBudgetRows, currentFacts, currentOutlook, currentPeriod, dashboardNow, goalsQuery.data, loans, paylater, pendingTransactionCount, reconciliation, subscriptions]);
   // One read state for the bell and the inline strip, so marking an item read clears it from both.
   const attentionReadState = useAttentionReadState(attentionItems, user?.email);
 
@@ -267,7 +271,6 @@ function DashboardPage() {
   const previousPeriod = periods.find((period) => String(period.id) === previousPeriodId) ?? null;
   const previousFactsQuery = useFinancialFactsQuery({ periodId: previousPeriod?.id }, showsPulse('spendVsLast') && previousPeriod != null);
   const reimbursementsQuery = useQuery({ queryKey: queryKeys.reimbursements.list(), queryFn: () => api.reimbursements.list(), enabled: showsPulse('reimbursementsDue') });
-  const goalsQuery = useGoalsQuery(showsPulse('unassigned') || showsPulse('setAside'));
   const previousFacts = previousFactsQuery.data?.data.facts;
   const previousPeriodInput: PulseInputs['previousPeriod'] = !previousPeriod ? 'none' : !previousFacts || !pacing ? null
     : pacing.status === 'ended'
@@ -322,6 +325,7 @@ function DashboardPage() {
     budget: <BudgetPanel periodId={selectedPeriod?.id ?? null} coverageStatus={selectedPeriod?.coverageStatus} isLoading={isPeriodLoading} isTracked={periodIsTracked} outlook={budgetOutlook} budgetRows={budgetRows} spending={categorySpending} totalPlanned={totalPlanned} remaining={budgetRemaining} dailyBudget={dailyBudget} formatAmount={formatAmount} />,
     activity: <ActivityPanel transactions={recent} categories={categories} compact={isMobile} now={dashboardNow} formatAmount={formatAmount} maskAmounts={maskAmounts} />,
     payments: <PaymentsPanel rows={commitments.rows} total={commitments.total} isLoading={isCommitmentsLoading} now={dashboardNow} formatAmount={formatAmount} maskAmounts={maskAmounts} />,
+    goals: <GoalsDashboardPanel overview={goalsQuery.data} isLoading={goalsQuery.isPending} now={dashboardNow} formatAmount={formatAmount} />,
   };
 
   if (isLoading) {

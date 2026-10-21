@@ -221,6 +221,20 @@ describe("goals", () => {
     expect((await app.inject({ method: "GET", url: `/api/goals/${trip.id}` })).json().categoryName).toBe("Travel");
   });
 
+  it("sums up each goal over a period for the monthly report", async () => {
+    const { goalsForPeriod } = await import("../services/goals");
+    const trip = (await post("/api/goals", { name: "Trip", targetAmount: 10_000_000, setAside: 4_000_000 })).json();
+    await post(`/api/goals/${trip.id}/allocations`, { amount: -1_000_000 });
+    await post(`/api/goals/${trip.id}/spend`, { amount: 500_000 });
+    await post("/api/goals", { name: "Empty", targetAmount: 1 });
+    const now = Date.now();
+    expect(await goalsForPeriod(now - 86_400_000, now + 86_400_000)).toEqual([
+      { name: "Trip", icon: null, kind: "spend", targetAmount: 10_000_000, putIn: 4_000_000, paid: 500_000, takenOut: 1_000_000, heldAtEnd: 2_500_000, finished: false },
+    ]);
+    // A period before the goal existed has nothing on it.
+    expect(await goalsForPeriod(now - 10 * 86_400_000, now - 5 * 86_400_000)).toEqual([]);
+  });
+
   it("queues a deleted goal's files for removal from storage", async () => {
     const goal = (await post("/api/goals", { name: "Phone", targetAmount: 1 })).json();
     state.db.insert(schema.goalAttachments).values({ goalId: goal.id, filename: "quote.pdf", r2Key: "goal-files/x/quote.pdf", mimetype: "application/pdf", fileSize: 10 }).run();

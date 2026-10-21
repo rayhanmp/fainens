@@ -140,6 +140,7 @@ export function SampleDashboardDemo() {
     activity: region('activity', <ActivityPanel transactions={data.recent} categories={data.categories} compact={false} now={data.now} formatAmount={data.formatAmount} maskAmounts={data.maskAmounts} />),
     netWorth: null,
     spending: null,
+    goals: null,
   };
 
   return (

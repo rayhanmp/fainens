@@ -5,7 +5,7 @@ export type Attention = {
   tone: 'danger' | 'warning' | 'info';
   title: string;
   detail: string;
-  to: '/accounts' | '/budget' | '/loans' | '/paylater' | '/periods' | '/subscriptions' | '/transactions';
+  to: '/accounts' | '/budget' | '/goals' | '/loans' | '/paylater' | '/periods' | '/subscriptions' | '/transactions';
   action: string;
 };
 
@@ -27,7 +27,45 @@ export type AttentionInput = {
   payLaterObligations: readonly CommitmentPayLater[];
   subscriptionRenewals: readonly { dueAt: number; amount: number }[];
   commitments: UpcomingCommitments;
+  /** What goals need from you; null while loading or without goals. */
+  goals?: GoalReminders | null;
 };
+
+/** The goal facts the bell reminds you of. */
+export type GoalReminders = {
+  /** What this month's amounts still ask, and what's free to put in. */
+  due: number;
+  free: number;
+  /** Goals that won't make their date at their monthly amount. */
+  late: ReadonlyArray<{ id: number; name: string; months: number; byDate: number }>;
+  /** Accounts holding less than the goals said to sit in them. */
+  shortAccounts: ReadonlyArray<{ id: number; name: string; balance: number; goalsHold: number }>;
+};
+
+/**
+ * The goal reminders from the Goals overview: this month's amounts not yet in, goals that won't
+ * make their date at their pace (paused ones aside), and accounts holding less than their goals.
+ */
+export function goalReminders(overview: {
+  unassigned: number;
+  accounts: ReadonlyArray<{ id: number; name: string; balance: number }>;
+  goals: ReadonlyArray<{ id: number; name: string; status: string; paused: boolean; targetAmount: number; setAside: number; monthlyAmount: number; setAsideThisMonth: number; byDate: number | null; reachMonths: number | null; accountId: number | null }>;
+}, now: number): GoalReminders {
+  const active = overview.goals.filter((goal) => goal.status === 'active');
+  const today = new Date(now);
+  const monthsUntil = (time: number) => {
+    const date = new Date(time);
+    return Math.max(1, (date.getFullYear() - today.getFullYear()) * 12 + date.getMonth() - today.getMonth());
+  };
+  const due = sum(active.filter((goal) => !goal.paused).map((goal) => Math.max(0, Math.min(goal.monthlyAmount - goal.setAsideThisMonth, goal.targetAmount - goal.setAside))));
+  const late = active
+    .filter((goal) => !goal.paused && goal.byDate !== null && goal.reachMonths !== null && goal.reachMonths > 0 && goal.byDate > now && goal.reachMonths > monthsUntil(goal.byDate))
+    .map((goal) => ({ id: goal.id, name: goal.name, months: goal.reachMonths! - monthsUntil(goal.byDate!), byDate: goal.byDate! }));
+  const shortAccounts = overview.accounts
+    .map((account) => ({ ...account, goalsHold: sum(active.filter((goal) => goal.accountId === account.id).map((goal) => goal.setAside)) }))
+    .filter((account) => account.goalsHold > 0 && account.balance < account.goalsHold);
+  return { due, free: Math.max(0, overview.unassigned), late, shortAccounts };
+}
 
 export type AttentionFormat = { amount: (cents: number) => string; date: (ms: number) => string };
 
@@ -135,6 +173,30 @@ export function buildAttentionItems(input: AttentionInput, format: AttentionForm
 
   if (currentPeriod && input.unallocatedSpentCents != null && input.unallocatedSpentCents > 0) {
     next.push({ id: `unallocated:${currentPeriod.id}`, tone: 'info', title: 'Some spending is unallocated', detail: `${format.amount(input.unallocatedSpentCents)} cannot yet be attributed to a category.`, to: '/transactions', action: 'Classify activity' });
+  }
+
+  const goals = input.goals;
+  if (goals) {
+    const month = new Date(now);
+    const monthKey = `${month.getFullYear()}-${month.getMonth() + 1}`;
+    for (const account of goals.shortAccounts.slice(0, 2)) {
+      next.push({ id: `goal-account:${account.id}`, tone: 'warning', title: `${account.name} holds less than its goals`, detail: `It has ${format.amount(account.balance)}; the goals said to sit there have ${format.amount(account.goalsHold)}.`, to: '/goals', action: 'Review goals' });
+    }
+    if (goals.late.length > 0) {
+      const first = goals.late[0];
+      const others = goals.late.length - 1;
+      next.push({
+        id: `goals-late:${goals.late.map((goal) => goal.id).join(',')}`,
+        tone: 'warning',
+        title: others ? `${first.name} and ${plural(others, 'other goal')} won’t make their date` : `${first.name} won’t make its date`,
+        detail: `At its monthly amount it gets there ${plural(first.months, 'month')} after ${format.date(first.byDate)}. Put in more each month, or move the date.`,
+        to: '/goals',
+        action: 'Review goals',
+      });
+    }
+    if (goals.due > 0 && goals.free > 0) {
+      next.push({ id: `goals-due:${monthKey}`, tone: 'info', title: `${format.amount(Math.min(goals.due, goals.free))} to put into goals`, detail: 'This month’s amounts aren’t in yet. One tap on Goals puts them in from your free money.', to: '/goals', action: 'Put it in' });
+    }
   }
 
   const priority = { danger: 0, warning: 1, info: 2 } as const;

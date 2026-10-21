@@ -16,6 +16,7 @@ import {
 import { getBudgetFacts, getFinancialFacts } from "../services/financial-facts";
 import { getFinancialRevision } from "../services/financial-revision";
 import { getPeriodCoverage } from "../services/period-coverage";
+import { goalsForPeriod } from "../services/goals";
 import { inclusivePeriodEnd, inclusivePeriodStart } from "../lib/calendar";
 
 // Query parameter schemas
@@ -113,6 +114,18 @@ const monthlyReportSchema = z.object({
   generatedAt: z.number().int().nonnegative(),
   isTemporary: z.boolean(),
   provenance: z.object({ source: z.string(), asOfMs: z.number(), includesDrafts: z.boolean() }).passthrough(),
+  /** What went into and out of each goal over the period. Not ledger facts, so not in the hash. */
+  goals: z.array(z.object({
+    name: z.string(),
+    icon: z.string().nullable(),
+    kind: z.enum(["spend", "keep"]),
+    targetAmount: z.number(),
+    putIn: z.number(),
+    paid: z.number(),
+    takenOut: z.number(),
+    heldAtEnd: z.number(),
+    finished: z.boolean(),
+  })).optional(),
 }).passthrough();
 const trendRowSchema = z.object({ periodId: z.number().int(), periodName: z.string(), startDate: z.number(), endDate: z.number(), revenue: z.number(), expenses: z.number(), netIncome: z.number(), generatedAt: z.number().int().nonnegative().optional(), isTemporary: z.boolean().optional(), coverage: reportCoverageSchema.optional() }).passthrough();
 const reportTypeParamsSchema = z.object({ reportType: z.enum(["income-statement", "balance-sheet", "cash-flow"]) });
@@ -302,6 +315,7 @@ export default async function (fastify: FastifyInstance) {
       return {
         ...reportBody,
         reportHash,
+        goals: await goalsForPeriod(periodStartMs, periodEndMs),
         ...getReportStatus(periodEndMs, generatedAt),
       };
     } catch (err) {

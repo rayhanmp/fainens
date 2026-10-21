@@ -42,6 +42,8 @@ export interface MonthlyReportProps {
   incomeBySource: Array<{ name: string; amount: number }>;
   expensesByCategory: Array<{ name: string; amount: number; color: string }>;
   budgetComparison: Array<{ category: string; budget: number; actual: number; variance: number }>;
+  /** What went into and out of each goal over the period. */
+  goals?: Array<{ name: string; kind: string; targetAmount: number; putIn: number; paid: number; takenOut: number; heldAtEnd: number; finished: boolean }>;
   allTransactions: Array<{ date: string; description: string; category: string; amount: number; type: string }>;
   coverage?: { isComparable: boolean; warnings: string[] };
   generatedAt?: number;
@@ -80,7 +82,11 @@ export function MonthlyReportPDF(p: MonthlyReportProps) {
   const plan = p.budgetComparison.reduce((sum, row) => sum + row.budget, 0);
   const spent = p.budgetComparison.reduce((sum, row) => sum + row.actual, 0);
   const hasBudget = p.budgetComparison.length > 0;
-  const sections = ['Financial overview', ...(hasBudget ? ['Budget performance'] : []), 'Transaction detail', 'Report notes'];
+  const goals = p.goals ?? [];
+  const hasGoals = goals.length > 0;
+  const putIn = goals.reduce((sum, goal) => sum + goal.putIn, 0);
+  const held = goals.reduce((sum, goal) => sum + goal.heldAtEnd, 0);
+  const sections = ['Financial overview', ...(hasBudget ? ['Budget performance'] : []), ...(hasGoals ? ['Goals'] : []), 'Transaction detail', 'Report notes'];
   const sectionNumber = (name: string) => String(sections.indexOf(name) + 1).padStart(2, '0');
 
   return <Document title={`Fainens - ${p.periodName}`} author="Fainens" subject="Personal financial report">
@@ -114,6 +120,24 @@ export function MonthlyReportPDF(p: MonthlyReportProps) {
         return <View key={`${row.category}-${i}`} style={[s.row, i % 2 ? s.alt : {}]} wrap={false}><Text style={[s.cell, s.budgetCategory, s.bold]}>{row.category}</Text><Text style={[s.cell, s.budgetUsedPlan]}>{money(row.actual)} / {money(row.budget)}</Text><View style={[s.budgetUsage, s.budgetUsageCell]}><View style={s.budgetTrack}><View style={[s.budgetFill, { width: `${usage}%`, backgroundColor: overBudget ? C.red : C.green }]} /></View></View><Text style={[s.cell, s.budgetVariance, row.variance < 0 ? s.negative : s.positive]}>{variance}</Text></View>;
       })}
       <View style={s.total} wrap={false}><Text style={s.bold}>{plan - spent < 0 ? 'Over budget' : 'Remaining budget'}</Text><Text style={[s.bold, plan - spent < 0 ? s.negative : s.blue]}>{money(Math.abs(plan - spent))}</Text></View>
+      <Footer />
+    </Page>}
+
+    {hasGoals && <Page size="A4" style={[s.page, s.tablePage]}><Header report={p} />
+      <View style={s.tableTitle} fixed><Text style={s.eyebrow}>{sectionNumber('Goals')} / Goals</Text><Text style={s.tableHeading}>Goals</Text><Text style={s.micro}>Put in {money(putIn)} this period / {money(held)} in goals at period end</Text></View>
+      <View style={s.tableHead} fixed><View style={[s.tableHeadCell, s.budgetCategory]}><Text style={s.headText}>GOAL</Text></View><View style={[s.tableHeadCell, s.budgetUsedPlan]}><Text style={[s.headText, s.headTextRight]}>HELD / TARGET</Text></View><View style={[s.tableHeadCell, s.budgetUsage]}><Text style={s.headText}>PROGRESS</Text></View><View style={[s.tableHeadCell, s.budgetVariance]}><Text style={[s.headText, s.headTextRight]}>PUT IN</Text></View></View>
+      {goals.map((goal, i) => {
+        const share = goal.targetAmount > 0 ? Math.min(100, Math.max(0, goal.heldAtEnd / goal.targetAmount * 100)) : 0;
+        const notes = [goal.paid ? `${money(goal.paid)} paid` : null, goal.takenOut ? `${money(goal.takenOut)} taken out` : null, goal.finished ? (goal.kind === 'spend' ? 'Bought' : 'Finished') : null].filter(Boolean).join(' / ');
+        return <View key={`${goal.name}-${i}`} style={[s.row, i % 2 ? s.alt : {}]} wrap={false}>
+          <View style={s.budgetCategory}><Text style={[s.cell, s.bold]}>{goal.name}</Text>{notes ? <Text style={[s.micro, { marginTop: 2 }]}>{notes}</Text> : null}</View>
+          <Text style={[s.cell, s.budgetUsedPlan]}>{money(goal.heldAtEnd)} / {money(goal.targetAmount)}</Text>
+          <View style={[s.budgetUsage, s.budgetUsageCell]}><View style={s.budgetTrack}><View style={[s.budgetFill, { width: `${share}%`, backgroundColor: C.blue }]} /></View></View>
+          <Text style={[s.cell, s.budgetVariance, goal.putIn > 0 ? s.positive : {}]}>{goal.putIn ? `+${money(goal.putIn)}` : money(0)}</Text>
+        </View>;
+      })}
+      <View style={s.total} wrap={false}><Text style={s.bold}>In goals at period end</Text><Text style={[s.bold, s.blue]}>{money(held)}</Text></View>
+      <Text style={[s.micro, { marginTop: 10 }]}>Goals split your money inside Fainens; nothing moves between accounts. Amounts held are as of the end of the period.</Text>
       <Footer />
     </Page>}
 

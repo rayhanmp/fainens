@@ -1,6 +1,6 @@
 import { defaultPulseMetrics, normalizePulseMetrics, type PulseMetricId } from './pulse-metrics.ts';
 
-export const dashboardSectionIds = ['budget', 'payments', 'activity', 'netWorth', 'spending', 'pulse'] as const;
+export const dashboardSectionIds = ['budget', 'payments', 'activity', 'netWorth', 'spending', 'pulse', 'goals'] as const;
 export type DashboardSection = typeof dashboardSectionIds[number];
 export type DashboardMetric = 'cash' | 'budget' | 'netWorth';
 export type DashboardSectionSize = 'small' | 'wide' | 'full';
@@ -16,19 +16,19 @@ export type DashboardViewPreferences = {
 
 export const dashboardSectionLabels: Record<DashboardSection, string> = {
   budget: 'Budget health', payments: 'Upcoming payments', activity: 'Recent activity',
-  netWorth: 'Net worth trend', spending: 'Spending activity', pulse: 'Financial pulse',
+  netWorth: 'Net worth trend', spending: 'Spending activity', pulse: 'Financial pulse', goals: 'Goals',
 };
 
 export function dashboardPreset(preset: DashboardPreset): DashboardViewPreferences {
   const pulseMetrics = [...defaultPulseMetrics];
   if (preset === 'original') return {
-    mainMetric: 'cash', sectionOrder: ['pulse', 'netWorth', 'spending', 'budget', 'activity', 'payments'], hiddenSections: ['payments'], sectionSizes: {}, pulseMetrics,
+    mainMetric: 'cash', sectionOrder: ['pulse', 'netWorth', 'spending', 'budget', 'activity', 'payments', 'goals'], hiddenSections: ['payments'], sectionSizes: {}, pulseMetrics,
   };
   if (preset === 'overview') return {
-    mainMetric: 'netWorth', sectionOrder: ['pulse', 'netWorth', 'spending', 'budget', 'payments', 'activity'], hiddenSections: [], sectionSizes: {}, pulseMetrics,
+    mainMetric: 'netWorth', sectionOrder: ['pulse', 'netWorth', 'spending', 'budget', 'payments', 'activity', 'goals'], hiddenSections: [], sectionSizes: {}, pulseMetrics,
   };
   if (preset === 'minimal') return {
-    mainMetric: 'cash', sectionOrder: ['activity', 'budget', 'payments', 'netWorth', 'spending', 'pulse'], hiddenSections: ['budget', 'payments', 'netWorth', 'spending', 'pulse'], sectionSizes: {}, pulseMetrics,
+    mainMetric: 'cash', sectionOrder: ['activity', 'budget', 'payments', 'netWorth', 'spending', 'pulse', 'goals'], hiddenSections: ['budget', 'payments', 'netWorth', 'spending', 'pulse', 'goals'], sectionSizes: {}, pulseMetrics,
   };
   return {
     mainMetric: 'budget', sectionOrder: [...dashboardSectionIds], hiddenSections: ['netWorth', 'spending', 'pulse'], sectionSizes: {}, pulseMetrics,
