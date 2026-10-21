@@ -1,7 +1,4 @@
-import { useState, type ElementType, type ReactNode } from 'react';
-import { CalendarDays, Check, Coins, MapPin, Pencil, Users } from 'lucide-react';
-import { Button } from '../../../components/ui/Button';
-import { Modal } from '../../../components/ui/Modal';
+import { CalendarDays, Check } from 'lucide-react';
 import { useBalanceVisibility } from '../../../hooks/useBalanceVisibility';
 import { cn } from '../../../lib/utils';
 import { Section } from '../../subscriptions/PageParts';
@@ -17,62 +14,13 @@ import { PackingPanel } from './PackingPanel';
 import { PeopleSection } from './PeopleSection';
 import type { Trip } from './queries';
 import { TripBudget } from './TripBudget';
-import { TripSettings } from './TripSettings';
 import { TodayPanel, TripRecap } from './TripStatus';
-import { CURRENCIES, dayLabel, daysBetween, nextUp, shortDate, tripLength, tripPhase, type NextItem } from './trip-utils';
+import { dayLabel, daysBetween, nextUp, shortDate, tripLength, tripPhase, type NextItem } from './trip-utils';
 
-type Tab = 'overview' | 'bookings' | 'days' | 'people' | 'packing' | 'notes' | 'files';
+export type TripTab = 'overview' | 'bookings' | 'days' | 'people' | 'packing' | 'notes' | 'files';
+type Tab = TripTab;
 const ROLE: Record<string, string> = { leave: 'Leaves', arrive: 'Lands', 'check-in': 'Check in', 'check-out': 'Check out', on: '' };
 
-/** "10–16 Mar 2027", "28 Feb – 6 Mar 2027" or across years in full. */
-function dateRange(start: number, end: number | null) {
-  const from = new Date(start);
-  if (end === null) return shortDate(start);
-  const to = new Date(end);
-  if (from.getFullYear() !== to.getFullYear()) return `${shortDate(start)} – ${shortDate(end)}`;
-  if (from.getMonth() !== to.getMonth()) return `${from.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${shortDate(end)}`;
-  return `${from.getDate()}–${shortDate(end)}`;
-}
-
-/** One fact about the trip in the strip, or a prompt to add it. */
-function Fact({ icon: Icon, children, empty, onEdit }: { icon: ElementType; children?: ReactNode; empty?: string; onEdit: () => void }) {
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-sm">
-      <Icon className="h-4 w-4 shrink-0 text-[var(--ref-on-surface-variant)]" aria-hidden />
-      {children ?? <button type="button" onClick={onEdit} className="font-medium text-[var(--ref-primary)] hover:underline">{empty}</button>}
-    </span>
-  );
-}
-
-/** The trip in one line: where, when (and how long until), the money there and who's going; Edit opens its settings. */
-function TripStrip({ trip, now, onEdit, onPeople }: { trip: Trip; now: number; onEdit: () => void; onPeople: () => void }) {
-  const { basics } = trip;
-  const phase = tripPhase(basics, now);
-  const days = tripLength(basics);
-  const symbol = CURRENCIES.find((item) => item.code === basics.currency)?.symbol;
-  const when = phase === 'before' ? `in ${daysBetween(now, basics.startDate!)} days` : phase === 'during' ? `day ${daysBetween(basics.startDate!, now) + 1} of ${days || '?'}` : phase === 'after' ? 'back home' : null;
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 sm:px-5">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-2">
-      <Fact icon={MapPin} empty="Add where you’re going" onEdit={onEdit}>{basics.places.length ? <span className="truncate font-semibold text-[var(--ref-on-surface)]">{basics.places.join(' → ')}</span> : undefined}</Fact>
-      <Fact icon={CalendarDays} empty="Add dates" onEdit={onEdit}>
-        {basics.startDate !== null ? (
-          <span className="text-[var(--ref-on-surface)]">
-            {dateRange(basics.startDate, basics.endDate)}
-            {days > 0 && <span className="text-[var(--ref-on-surface-variant)]"> · {days} days</span>}
-            {when && <span className={cn('ml-2 rounded-full px-2 py-0.5 text-[11px] font-semibold', phase === 'during' ? 'bg-[var(--ref-primary)] text-[var(--color-surface)]' : 'bg-[var(--ref-surface-container-high)] text-[var(--ref-on-surface-variant)]')}>{when}</span>}
-          </span>
-        ) : undefined}
-      </Fact>
-      <Fact icon={Coins} empty="Add the money there" onEdit={onEdit}>
-        {basics.currency ? <span className="text-[var(--ref-on-surface)]">{basics.currency}{basics.rate ? <span className="text-[var(--ref-on-surface-variant)]"> · Rp{basics.rate.toLocaleString('id-ID')} for {symbol ?? basics.currency}1</span> : <span className="text-[var(--color-warning)]"> · no rate yet</span>}</span> : undefined}
-      </Fact>
-      <Fact icon={Users} empty="Add who’s going" onEdit={onPeople}>{trip.travellers.length ? <span className="text-[var(--ref-on-surface)]">{trip.travellers.map((traveller) => traveller.name).join(', ')}</span> : undefined}</Fact>
-      </div>
-      <Button type="button" size="sm" variant="secondary" className="shrink-0 self-start sm:self-center" onClick={onEdit} aria-label="Edit trip"><Pencil className="inline h-3.5 w-3.5 sm:mr-1.5" aria-hidden /><span className="hidden sm:inline">Edit trip</span></Button>
-    </div>
-  );
-}
 
 function nextLabel(item: NextItem) {
   if (item.type === 'plan') return { icon: CalendarDays, text: item.plan.title };
@@ -154,22 +102,24 @@ function GettingStarted({ trip, onEdit, go }: { trip: Trip; onEdit: () => void; 
 }
 
 /**
- * A holiday goal's page below its top card: the trip in one line, then tabs: an overview (today's
- * plans on the trip, how it went after, the budget, what's next, what's left to set up, and the
- * goal's own money: how it's growing and its breakdown), bookings, the days, who's going,
- * packing, notes and files.
+ * A holiday goal's page below its top card, in tabs: an overview (today's plans on the trip, how
+ * it went after, the budget, what's next, what's left to set up, and the goal's own money: how
+ * it's growing and its breakdown), bookings, the days, who's going, packing, notes and files.
+ * The trip's settings sit beside, in the rail.
  */
-export function TripWorkspace({ detail, trip, now, color, canPay, onPayPart, onPayBreakdown }: {
+export function TripWorkspace({ detail, trip, now, color, canPay, tab, onTab, onEdit, onPayPart, onPayBreakdown }: {
   detail: GoalDetail;
   trip: Trip;
   now: number;
   color: string;
   canPay: boolean;
+  tab: TripTab;
+  onTab: (tab: TripTab) => void;
+  onEdit: () => void;
   onPayPart: (partId: number) => void;
   onPayBreakdown: (part: GoalPart) => void;
 }) {
-  const [tab, setTab] = useState<Tab>('overview');
-  const [editing, setEditing] = useState(false);
+  const setTab = onTab;
   const { goal } = detail;
   const phase = tripPhase(trip.basics, now);
   const tabs: Array<{ key: Tab; label: string; count?: number }> = [
@@ -185,8 +135,6 @@ export function TripWorkspace({ detail, trip, now, color, canPay, onPayPart, onP
 
   return (
     <div className="space-y-4">
-      <TripStrip trip={trip} now={now} onEdit={() => setEditing(true)} onPeople={() => go('people')} />
-
       <div role="tablist" aria-label="Trip" className="-mx-1 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-[var(--color-border)] px-1 [scrollbar-width:none]">
         {tabs.map((item) => (
           <button
@@ -211,7 +159,7 @@ export function TripWorkspace({ detail, trip, now, color, canPay, onPayPart, onP
           <TripBudget trip={trip} target={goal.targetAmount} />
           <div className="space-y-6">
             <NextUp trip={trip} now={now} go={go} />
-            <GettingStarted trip={trip} onEdit={() => setEditing(true)} go={go} />
+            <GettingStarted trip={trip} onEdit={onEdit} go={go} />
           </div>
         </div>
         {/* The goal's own money, always on the page it opens to. */}
@@ -236,13 +184,6 @@ export function TripWorkspace({ detail, trip, now, color, canPay, onPayPart, onP
       <div role="tabpanel" hidden={tab !== 'files'}>
         <FilesSection detail={detail} />
       </div>
-
-      {editing && (
-        <Modal isOpen onClose={() => setEditing(false)} title="Trip" footer={<div className="flex justify-end"><Button type="button" size="sm" onClick={() => setEditing(false)}>Done</Button></div>}>
-          <p className="mb-2 text-sm text-[var(--ref-on-surface-variant)]">Changes save as you make them.</p>
-          <TripSettings goalId={goal.id} trip={trip} />
-        </Modal>
-      )}
     </div>
   );
 }

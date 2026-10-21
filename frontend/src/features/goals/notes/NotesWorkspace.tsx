@@ -272,8 +272,8 @@ export function NotesWorkspace({ detail, bookings = NO_BOOKINGS }: {
               <button type="button" className={iconButton} aria-label={focus ? 'Leave focus mode' : 'Focus mode'} title={focus ? 'Leave focus mode (Esc)' : 'Focus mode'} onClick={() => setFocus((on) => !on)}>{focus ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}</button>
             </div>
 
-            {/* Page tabs. */}
-            <div className="-mb-px flex w-full items-end gap-1 overflow-x-auto">
+            {/* Page tabs. They wrap rather than scroll, so their menus aren't cut off. */}
+            <div className="-mb-px flex w-full flex-wrap items-end gap-1">
               {(pages.length ? pages : [{ id: 0, title: 'Notes' } as NotePage]).map((page) => {
                 const current = page.id === active?.id || (!active && page.id === 0);
                 if (renaming?.id === page.id) {

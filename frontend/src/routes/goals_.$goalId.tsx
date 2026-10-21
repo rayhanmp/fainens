@@ -16,7 +16,8 @@ import { CompleteGoalDialog, GoalDialog, MoveMoneyDialog, PayFromGoalDialog, typ
 import { NotesWorkspace } from '../features/goals/notes/NotesWorkspace';
 import { useTripQuery } from '../features/goals/trip/queries';
 import { TripIllustration } from '../features/goals/trip/TripIllustration';
-import { TripWorkspace } from '../features/goals/trip/TripWorkspace';
+import { TripSettingsDialog, TripSummary } from '../features/goals/trip/TripSummary';
+import { TripWorkspace, type TripTab } from '../features/goals/trip/TripWorkspace';
 import { TypeArt } from '../features/goals/types/TypeArt';
 import { TypePanel } from '../features/goals/types/TypePanel';
 import { useAverageSpending, useGoalHeadline } from '../features/goals/use-headline';
@@ -69,6 +70,8 @@ function GoalPage() {
   const tripQuery = useTripQuery(id, goal?.goalType === 'trip');
   const trip = goal?.goalType === 'trip' ? tripQuery.data : undefined;
   const [now] = useState(() => Date.now());
+  const [tripTab, setTripTab] = useState<TripTab>('overview');
+  const [editingTrip, setEditingTrip] = useState(false);
   const firstFlight = trip?.bookings.find((booking) => booking.kind === 'flight');
 
   // Putting money in that reaches a new quarter of the target is celebrated.
@@ -132,16 +135,22 @@ function GoalPage() {
             <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
               <div className="min-w-0 space-y-6">
                 {trip ? (
-                  // A holiday plans its trip in tabs, with the goal's money in one of them.
-                  <TripWorkspace
-                    detail={detail}
-                    trip={trip}
-                    now={now}
-                    color={color}
-                    canPay={goal.status === 'active' && goal.setAside > 0}
-                    onPayPart={(partId) => setPaying({ partId })}
-                    onPayBreakdown={(part) => setPaying({ partId: part.id })}
-                  />
+                  // A holiday plans its trip in tabs; the trip's facts sit beside, and above the tabs on narrow screens.
+                  <>
+                    <div className="xl:hidden"><TripSummary trip={trip} now={now} onEdit={() => setEditingTrip(true)} onPeople={() => setTripTab('people')} /></div>
+                    <TripWorkspace
+                      detail={detail}
+                      trip={trip}
+                      now={now}
+                      color={color}
+                      canPay={goal.status === 'active' && goal.setAside > 0}
+                      tab={tripTab}
+                      onTab={setTripTab}
+                      onEdit={() => setEditingTrip(true)}
+                      onPayPart={(partId) => setPaying({ partId })}
+                      onPayBreakdown={(part) => setPaying({ partId: part.id })}
+                    />
+                  </>
                 ) : (
                   <>
                     <TypePanel detail={detail} overview={overview} spending={spending} now={now} color={color} onPutIn={(note) => setMoving({ direction: 'in', note })} />
@@ -152,9 +161,13 @@ function GoalPage() {
                   </>
                 )}
               </div>
-              <DetailsPanel detail={detail} overview={overview} />
+              <div className="space-y-6">
+                {trip && <div className="hidden xl:block"><TripSummary trip={trip} now={now} onEdit={() => setEditingTrip(true)} onPeople={() => setTripTab('people')} /></div>}
+                <DetailsPanel detail={detail} overview={overview} />
+              </div>
             </div>
 
+            {trip && editingTrip && <TripSettingsDialog goalId={id} trip={trip} onClose={() => setEditingTrip(false)} />}
             {moving && (
               <MoveMoneyDialog
                 goal={goal}
