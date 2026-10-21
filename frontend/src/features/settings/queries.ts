@@ -19,14 +19,32 @@ export type ExportSelection = {
   memories: boolean;
 };
 
+const EXPORT_PAGE = 100;
+
+/**
+ * Every transaction, oldest first, page by page: all periods, drafts, and corrections with what they
+ * corrected, so the export holds the whole ledger rather than the list's first page of this period.
+ */
+async function allTransactions() {
+  const rows: unknown[] = [];
+  for (let offset = 0; ; offset += EXPORT_PAGE) {
+    const page = await unwrapGenerated(
+      listTransactions({ periodId: 'all', includeReversals: 'true', sort: 'oldest', limit: String(EXPORT_PAGE), offset: String(offset) }),
+      200,
+      'Failed to export transactions',
+    );
+    rows.push(...page.data);
+    if (page.data.length < EXPORT_PAGE || rows.length >= page.pagination.total) return rows;
+  }
+}
+
 /** Reads a consistent export snapshot through one feature-owned query command. */
 export function useExportDataMutation() {
   return useMutation({
     mutationFn: async (selection: ExportSelection) => {
       const exportData: Record<string, unknown> = {};
       if (selection.transactions) {
-        const transactions = await unwrapGenerated(listTransactions(), 200, 'Failed to export transactions');
-        exportData.transactions = transactions.data;
+        exportData.transactions = await allTransactions();
       }
       if (selection.accounts) {
         exportData.accounts = await unwrapGenerated(listAccounts(), 200, 'Failed to export accounts');
