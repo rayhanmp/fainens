@@ -53,7 +53,8 @@ export async function createAuditLog(input: CreateAuditLogInput): Promise<number
 export interface AuditLogFilters {
   entityType?: EntityType;
   entityId?: number;
-  action?: AuditAction;
+  /** An exact action, or "other" for every workflow step that isn't a create, update or delete. */
+  action?: AuditAction | "other" | (string & {});
   startDate?: number;
   endDate?: number;
   /** Case-insensitive match on resource type, id, or action (partial) */
@@ -82,7 +83,9 @@ export async function getAuditLogs(
   if (filters.entityId !== undefined) {
     conditions.push(eq(auditLogs.entityId, filters.entityId));
   }
-  if (filters.action) {
+  if (filters.action === "other") {
+    conditions.push(sql`${auditLogs.action} NOT IN ('create', 'update', 'delete')`);
+  } else if (filters.action) {
     conditions.push(eq(auditLogs.action, filters.action));
   }
   if (filters.startDate !== undefined) {
@@ -93,11 +96,14 @@ export async function getAuditLogs(
   }
   if (filters.search?.trim()) {
     const term = `%${filters.search.trim()}%`;
+    // The snapshots hold the names people search by ("Chateraise", "April 2026"), not only the type and id.
     conditions.push(
       sql`(
         ${auditLogs.entityType} LIKE ${term} OR
         CAST(${auditLogs.entityId} AS TEXT) LIKE ${term} OR
-        ${auditLogs.action} LIKE ${term}
+        ${auditLogs.action} LIKE ${term} OR
+        CAST(${auditLogs.beforeSnapshot} AS TEXT) LIKE ${term} OR
+        CAST(${auditLogs.afterSnapshot} AS TEXT) LIKE ${term}
       )`,
     );
   }
@@ -151,6 +157,26 @@ export async function getAuditLogs(
     page,
     pageSize,
   };
+}
+
+/**
+ * How many entries each day since `since`, and how many of them were deletions. Days are the
+ * viewer's calendar days: `utcOffsetMinutes` is how far their clock is ahead of UTC.
+ */
+export async function getAuditActivity(since: number, utcOffsetMinutes: number): Promise<Array<{ day: string; count: number; removed: number }>> {
+  const shiftSeconds = Math.round(utcOffsetMinutes) * 60;
+  const day = sql<string>`date(${auditLogs.createdAt} / 1000 + ${shiftSeconds}, 'unixepoch')`;
+  const rows = await db
+    .select({
+      day,
+      count: sql<number>`count(*)`,
+      removed: sql<number>`sum(case when ${auditLogs.action} = 'delete' then 1 else 0 end)`,
+    })
+    .from(auditLogs)
+    .where(sql`${auditLogs.createdAt} >= ${since}`)
+    .groupBy(day)
+    .orderBy(day);
+  return rows.map((row) => ({ day: row.day, count: Number(row.count), removed: Number(row.removed) }));
 }
 
 // Get audit history for a specific entity

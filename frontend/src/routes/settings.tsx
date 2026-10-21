@@ -1509,7 +1509,7 @@ export function SettingsPage({ onClose }: { onClose?: () => void } = {}) {
                   {[
                     { to: '/anomalies', label: 'Data quality', description: 'Find issues and inconsistencies in your records.' },
                     { to: '/gallery', label: 'Image storage', description: 'Receipt, conversation, and wishlist images.' },
-                    { to: '/audit-log', label: 'Security audit', description: 'Account activity and security events.' },
+                    { to: '/audit-log', label: 'Security audit', description: 'Every add, change and deletion, and when it happened.' },
                   ].map(({ to, label, description }) => (
                     <Link key={to} to={to} className="group -mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 text-sm transition-colors hover:bg-[var(--ref-surface-container-low)]">
                       <span className="min-w-0 flex-1"><span className="block font-medium text-[var(--ref-on-surface)]">{label}</span><span className="block text-xs text-[var(--ref-on-surface-variant)]">{description}</span></span>

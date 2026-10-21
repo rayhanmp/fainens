@@ -27512,6 +27512,82 @@
         }
       }
     },
+    "/api/audit-log/activity": {
+      "get": {
+        "operationId": "getAuditActivity",
+        "tags": [
+          "audit"
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "since",
+            "required": true
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": -840,
+              "maximum": 840
+            },
+            "in": "query",
+            "name": "utcOffsetMinutes",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "days": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "day": {
+                            "type": "string"
+                          },
+                          "count": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "removed": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "day",
+                          "count",
+                          "removed"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "days"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/audit-log/{entityType}/{entityId}": {
       "get": {
         "operationId": "getEntityAuditHistory",

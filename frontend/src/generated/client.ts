@@ -13080,6 +13080,37 @@ export type ListAuditLogs200 = {
   [key: string]: unknown;
 };
 
+export type GetAuditActivityParams = {
+/**
+ * @minimum 0
+ * @maximum 9007199254740991
+ */
+since: number;
+/**
+ * @minimum -840
+ * @maximum 840
+ */
+utcOffsetMinutes?: number;
+};
+
+export type GetAuditActivity200DaysItem = {
+  day: string;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  count: number;
+  /**
+   * @minimum 0
+   * @maximum 9007199254740991
+   */
+  removed: number;
+};
+
+export type GetAuditActivity200 = {
+  days: GetAuditActivity200DaysItem[];
+};
+
 /**
  * @nullable
  */
@@ -31658,6 +31689,46 @@ export const getListAuditLogsUrl = (params?: ListAuditLogsParams,) => {
 export const listAuditLogs = async (params?: ListAuditLogsParams, options?: RequestInit): Promise<listAuditLogsResponse> => {
   
   return generatedFetch<listAuditLogsResponse>(getListAuditLogsUrl(params),
+  {      
+    ...options,
+    method: 'GET'
+    
+    
+  }
+);}
+
+
+
+export type getAuditActivityResponse200 = {
+  data: GetAuditActivity200
+  status: 200
+}
+    
+export type getAuditActivityResponseSuccess = (getAuditActivityResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getAuditActivityResponse = (getAuditActivityResponseSuccess)
+
+export const getGetAuditActivityUrl = (params: GetAuditActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/audit-log/activity?${stringifiedParams}` : `/api/audit-log/activity`
+}
+
+export const getAuditActivity = async (params: GetAuditActivityParams, options?: RequestInit): Promise<getAuditActivityResponse> => {
+  
+  return generatedFetch<getAuditActivityResponse>(getGetAuditActivityUrl(params),
   {      
     ...options,
     method: 'GET'

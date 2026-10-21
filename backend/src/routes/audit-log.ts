@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 
 import {
+  getAuditActivity,
   getAuditLogs,
   getEntityAuditHistory,
   type AuditLogFilters,
@@ -16,7 +17,9 @@ const auditActionSchema = z.string().trim().min(1).max(60);
 const auditLogEntrySchema = z.object({ id: z.number().int(), entityType: auditEntityTypeSchema, entityId: z.number().int(), action: auditActionSchema, beforeSnapshot: z.record(z.string(), z.unknown()).nullable(), afterSnapshot: z.record(z.string(), z.unknown()).nullable(), createdAt: z.number() }).passthrough();
 const auditLogQuerySchema = z.object({ entityType: auditEntityTypeSchema.optional(), entityId: z.string().regex(/^\d+$/).optional(), action: auditActionSchema.optional(), search: z.string().max(120).optional(), page: z.string().regex(/^\d+$/).optional(), pageSize: z.string().regex(/^\d+$/).optional(), startDate: z.string().regex(/^\d+$/).optional(), endDate: z.string().regex(/^\d+$/).optional() });
 const auditEntityParamsSchema = z.object({ entityType: auditEntityTypeSchema, entityId: z.coerce.number().int().positive() });
-const auditLogListResponseSchema = z.object({ entries: z.array(auditLogEntrySchema), total: z.number().int().nonnegative(), page: z.number().int().positive(), pageSize: z.number().int().positive() }).passthrough();
+const auditActivityQuerySchema = z.object({ since: z.coerce.number().int().nonnegative(), utcOffsetMinutes: z.coerce.number().int().min(-840).max(840).default(0) });
+const auditActivityResponseSchema = z.object({ days: z.array(z.object({ day: z.string(), count: z.number().int().nonnegative(), removed: z.number().int().nonnegative() })) });
+const auditLogListResponseSchema =z.object({ entries: z.array(auditLogEntrySchema), total: z.number().int().nonnegative(), page: z.number().int().positive(), pageSize: z.number().int().positive() }).passthrough();
 
 export default async function (fastify: FastifyInstance) {
   fastify.addHook("onRequest", fastify.authenticate);
@@ -31,6 +34,8 @@ export default async function (fastify: FastifyInstance) {
       search?: string;
       page?: string;
       pageSize?: string;
+      startDate?: string;
+      endDate?: string;
     };
 
     const filters: AuditLogFilters = {};
@@ -38,11 +43,21 @@ export default async function (fastify: FastifyInstance) {
     if (query.entityId) filters.entityId = parseInt(query.entityId);
     if (query.action) filters.action = query.action as AuditLogFilters["action"];
     if (query.search?.trim()) filters.search = query.search.trim();
+    if (query.startDate) filters.startDate = Number(query.startDate);
+    if (query.endDate) filters.endDate = Number(query.endDate);
 
     const page = parseInt(query.page || "1");
     const pageSize = parseInt(query.pageSize || "50");
 
     return await getAuditLogs(filters, page, pageSize);
+  });
+
+  // Entries per day, for the activity grid at the top of the page.
+  fastify.get("/api/audit-log/activity", {
+    schema: { operationId: "getAuditActivity", tags: ["audit"], querystring: auditActivityQuerySchema, response: { 200: auditActivityResponseSchema } },
+  }, async (request) => {
+    const { since, utcOffsetMinutes } = auditActivityQuerySchema.parse(request.query);
+    return { days: await getAuditActivity(since, utcOffsetMinutes) };
   });
 
   fastify.get("/api/audit-log/:entityType/:entityId", {

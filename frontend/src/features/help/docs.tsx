@@ -993,7 +993,7 @@ export const DOCS: DocPage[] = [
       { type: 'h2', id: 'pdf', text: 'Password-protected reports' },
       { type: 'p', text: 'Turn it on in Settings → PDF reports. The password is your birthday in the order you choose, and each PDF is encrypted before it downloads.' },
       { type: 'h2', id: 'audit', text: 'Security audit' },
-      { type: 'p', text: 'See important changes and when they happened. Filter by the kind of record and the action, search, and choose View payload to compare the record before and after the change.' },
+      { type: 'p', text: 'See everything that was added, changed or deleted, and when. The squares at the top show the last 12 weeks, darker on busier days with a red dot where something was deleted; click one to list only that day. Search by a name, place or note, or filter by the kind of record and change. Open an entry to see each field before and after, and everything else that happened to that record.' },
       { type: 'h2', id: 'images', text: 'Image storage' },
       { type: 'p', text: 'Every receipt and photo you attach, whether in Agent, on a transaction or in the wishlist, is kept in Image storage. Filter by where it came from, search, preview, and delete images you don’t need.' },
       { type: 'open', link: { to: '/settings', label: 'Open Settings' } },
