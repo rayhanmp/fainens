@@ -31,6 +31,7 @@ import {
   type UpdateTripPlanBody,
   type UpdateTripTravellerBody,
 } from '../../../generated/client';
+import { toast } from '../../../components/ui/useToast';
 import { unwrapGenerated } from '../../core/generated-response';
 import { queryKeys } from '../../core/query-keys';
 
@@ -71,6 +72,13 @@ function useTripMutation<TInput, TResult>(run: (input: TInput) => Promise<TResul
 }
 
 export const useUpdateTripMutation = () => useTripMutation(({ id, ...body }: UpdateGoalTripBody & { id: number }) => unwrapGenerated(updateGoalTrip(id, body), 200, 'Could not save the trip'));
+
+export type TripSave = (body: UpdateGoalTripBody) => void;
+/** Saves a change to the trip's basics as it's made, saying so when it can't. */
+export function useTripSave(goalId: number): TripSave {
+  const update = useUpdateTripMutation();
+  return (body) => update.mutate({ id: goalId, ...body }, { onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not save the trip') });
+}
 export const usePlanAgainMutation = () => useTripMutation((id: number) => unwrapGenerated(planTripAgain(id), 201, 'Could not plan it again'));
 export const useAddTravellerMutation = () => useTripMutation(({ goalId, ...body }: AddTripTravellerBody & { goalId: number }) => unwrapGenerated(addTripTraveller(goalId, body), 201, 'Could not add them'));
 export const useUpdateTravellerMutation = () => useTripMutation(({ id, ...body }: UpdateTripTravellerBody & { id: number }) => unwrapGenerated(updateTripTraveller(id, body), 200, 'Could not save'));

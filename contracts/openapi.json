@@ -16155,6 +16155,20 @@
                           "rupiah": {
                             "type": "number"
                           },
+                          "color": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "blue",
+                              "teal",
+                              "green",
+                              "amber",
+                              "red",
+                              "pink",
+                              "purple",
+                              "graphite"
+                            ]
+                          },
                           "sortOrder": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -16172,6 +16186,7 @@
                           "cost",
                           "costCurrency",
                           "rupiah",
+                          "color",
                           "sortOrder"
                         ],
                         "additionalProperties": false
@@ -16712,6 +16727,20 @@
                           "rupiah": {
                             "type": "number"
                           },
+                          "color": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "blue",
+                              "teal",
+                              "green",
+                              "amber",
+                              "red",
+                              "pink",
+                              "purple",
+                              "graphite"
+                            ]
+                          },
                           "sortOrder": {
                             "type": "integer",
                             "minimum": -9007199254740991,
@@ -16729,6 +16758,7 @@
                           "cost",
                           "costCurrency",
                           "rupiah",
+                          "color",
                           "sortOrder"
                         ],
                         "additionalProperties": false
@@ -18093,6 +18123,20 @@
                   "costCurrency": {
                     "type": "string",
                     "pattern": "^[A-Z]{3}$"
+                  },
+                  "color": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "blue",
+                      "teal",
+                      "green",
+                      "amber",
+                      "red",
+                      "pink",
+                      "purple",
+                      "graphite"
+                    ]
                   }
                 },
                 "required": [
@@ -18161,6 +18205,20 @@
                     "rupiah": {
                       "type": "number"
                     },
+                    "color": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "blue",
+                        "teal",
+                        "green",
+                        "amber",
+                        "red",
+                        "pink",
+                        "purple",
+                        "graphite"
+                      ]
+                    },
                     "sortOrder": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -18178,6 +18236,7 @@
                     "cost",
                     "costCurrency",
                     "rupiah",
+                    "color",
                     "sortOrder"
                   ],
                   "additionalProperties": false
@@ -18271,6 +18330,20 @@
                   "costCurrency": {
                     "type": "string",
                     "pattern": "^[A-Z]{3}$"
+                  },
+                  "color": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "blue",
+                      "teal",
+                      "green",
+                      "amber",
+                      "red",
+                      "pink",
+                      "purple",
+                      "graphite"
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -18335,6 +18408,20 @@
                     "rupiah": {
                       "type": "number"
                     },
+                    "color": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "blue",
+                        "teal",
+                        "green",
+                        "amber",
+                        "red",
+                        "pink",
+                        "purple",
+                        "graphite"
+                      ]
+                    },
                     "sortOrder": {
                       "type": "integer",
                       "minimum": -9007199254740991,
@@ -18352,6 +18439,7 @@
                     "cost",
                     "costCurrency",
                     "rupiah",
+                    "color",
                     "sortOrder"
                   ],
                   "additionalProperties": false
@@ -18548,6 +18636,20 @@
                       "rupiah": {
                         "type": "number"
                       },
+                      "color": {
+                        "nullable": true,
+                        "type": "string",
+                        "enum": [
+                          "blue",
+                          "teal",
+                          "green",
+                          "amber",
+                          "red",
+                          "pink",
+                          "purple",
+                          "graphite"
+                        ]
+                      },
                       "sortOrder": {
                         "type": "integer",
                         "minimum": -9007199254740991,
@@ -18565,6 +18667,7 @@
                       "cost",
                       "costCurrency",
                       "rupiah",
+                      "color",
                       "sortOrder"
                     ],
                     "additionalProperties": false

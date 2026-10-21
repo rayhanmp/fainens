@@ -111,6 +111,11 @@ describe("goal trips", () => {
     expect((await inject("PATCH", `/api/goal-plans/${lunch.id}`, { time: "14:00" })).statusCode).toBe(400);
     expect((await inject("PATCH", `/api/goal-plans/${lunch.id}`, { time: "11:00", endTime: "12:15" })).json().endTime).toBe("12:15");
     expect((await inject("PATCH", `/api/goal-plans/${lunch.id}`, { time: null })).json().endTime).toBeNull();
+    // It can have a calendar colour, or go back to the accent one.
+    expect(lunch.color).toBeNull();
+    expect((await inject("PATCH", `/api/goal-plans/${lunch.id}`, { color: "teal" })).json().color).toBe("teal");
+    expect((await inject("PATCH", `/api/goal-plans/${lunch.id}`, { color: "neon" })).statusCode).toBe(400);
+    expect((await inject("PATCH", `/api/goal-plans/${lunch.id}`, { color: null })).json().color).toBeNull();
     await inject("DELETE", `/api/goal-plans/${lunch.id}`);
 
     const rayhan = (await inject("POST", "/api/goals/1/travellers", { name: "Rayhan", passportExpiry: day(5, 1) })).json();

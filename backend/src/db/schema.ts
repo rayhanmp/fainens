@@ -345,6 +345,8 @@ export const goalPlans = sqliteTable("goal_plan", {
   endTime: text("end_time"),
   title: text("title").notNull(),
   place: text("place"),
+  /** Its colour on the calendar (one of `PLAN_COLORS`); null for the accent colour. */
+  color: text("color"),
   cost: real("cost").notNull().default(0),
   costCurrency: text("cost_currency").notNull().default("IDR"),
   sortOrder: integer("sort_order").notNull().default(0),

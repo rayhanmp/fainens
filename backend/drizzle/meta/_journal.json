@@ -414,6 +414,13 @@
       "when": 1788170000000,
       "tag": "0058_goal_plan_end_time",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1788180000000,
+      "tag": "0059_goal_plan_color",
+      "breakpoints": true
     }
   ]
 }

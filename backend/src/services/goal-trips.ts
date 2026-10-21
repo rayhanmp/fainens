@@ -163,8 +163,13 @@ export const planView = (row: typeof goalPlans.$inferSelect, basics: TripBasics)
   cost: row.cost,
   costCurrency: row.costCurrency,
   rupiah: toRupiah(row.cost, row.costCurrency, basics),
+  color: (PLAN_COLORS as readonly string[]).includes(row.color ?? '') ? row.color as PlanColor : null,
   sortOrder: row.sortOrder,
 });
+
+/** Colours a plan can have on the calendar, like a calendar app's event colours. */
+export const PLAN_COLORS = ["blue", "teal", "green", "amber", "red", "pink", "purple", "graphite"] as const;
+export type PlanColor = (typeof PLAN_COLORS)[number];
 
 export const PACKING_CATEGORIES = ["clothes", "toiletries", "documents", "electronics", "medicine", "other"] as const;
 export const PACKING_BAGS = ["carry-on", "checked", "personal"] as const;

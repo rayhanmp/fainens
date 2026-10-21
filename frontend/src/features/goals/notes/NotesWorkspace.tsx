@@ -277,7 +277,7 @@ export function NotesWorkspace({ detail, bookings = NO_BOOKINGS }: {
               {(pages.length ? pages : [{ id: 0, title: 'Notes' } as NotePage]).map((page) => {
                 const current = page.id === active?.id || (!active && page.id === 0);
                 if (renaming?.id === page.id) {
-                  return <input key={page.id} autoFocus aria-label="Page name" value={renaming.title} maxLength={80} onChange={(event) => setRenaming({ ...renaming, title: event.target.value })} onBlur={() => void rename()} onKeyDown={(event) => { if (event.key === 'Enter') void rename(); if (event.key === 'Escape') setRenaming(null); }} className="brutalist-input mb-1 h-[30px] w-40 text-xs" />;
+                  return <input key={page.id} autoFocus aria-label="Page name" value={renaming.title} maxLength={80} onChange={(event) => setRenaming({ ...renaming, title: event.target.value })} onBlur={() => void rename()} onKeyDown={(event) => { if (event.key === 'Enter') void rename(); if (event.key === 'Escape') setRenaming(null); }} className="brutalist-input mb-1 h-[30px] !w-40 !py-1 text-xs" />;
                 }
                 return (
                   <div key={page.id} className={cn('relative flex shrink-0 items-center border-b-2', current ? 'border-[var(--ref-primary)]' : 'border-transparent')}>

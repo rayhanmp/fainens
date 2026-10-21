@@ -1,15 +1,15 @@
 import { useRef, useState } from 'react';
-import { Check, ExternalLink, Paperclip, Plus, Upload } from 'lucide-react';
+import { ArrowRight, Check, Clock, ExternalLink, Hash, MapPin, Paperclip, Plus, Tag, Upload, Wallet } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { useConfirm } from '../../../components/ui/ConfirmDialog';
 import { Modal } from '../../../components/ui/Modal';
 import { toast } from '../../../components/ui/useToast';
 import { useBalanceVisibility } from '../../../hooks/useBalanceVisibility';
 import { cn } from '../../../lib/utils';
-import { Field, MoneyField, Segmented } from '../../savings/fields';
+import { MoneyField, Segmented } from '../../savings/fields';
 import { Dropdown } from '../../settings/controls';
 import { Section } from '../../subscriptions/PageParts';
-import { ErrorLine, Footer } from '../dialogs';
+import { ErrorLine, Footer, IconRow, RemoveButton, SubField, TitleInput } from '../dialogs';
 import { goalFileUrl, useUploadGoalFileMutation, type GoalFile } from '../queries';
 import { BOOKING_ICONS } from './booking-icons';
 import { useAddBookingMutation, useDeleteBookingMutation, useUpdateBookingMutation, type Booking, type Trip } from './queries';
@@ -25,22 +25,22 @@ const orNull = (value: string) => (value.trim() ? value.trim() : null);
 /** Nights between checking in and out, by the calendar. */
 const nights = (booking: Pick<Booking, 'startAt' | 'endAt'>) => (booking.startAt !== null && booking.endAt !== null ? Math.max(0, Math.round((fromDayKey(wallDay(booking.endAt)) - fromDayKey(wallDay(booking.startAt))) / 86_400_000)) : 0);
 
-/** A text field with its label above. */
-function TextField({ label, value, onChange, placeholder, id, maxLength = 200, autoFocus }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; id: string; maxLength?: number; autoFocus?: boolean }) {
-  return (
-    <Field label={label} htmlFor={id}>
-      <input id={id} className="brutalist-input h-[34px] w-full" value={value} maxLength={maxLength} placeholder={placeholder} autoFocus={autoFocus} onChange={(event) => onChange(event.target.value)} />
-    </Field>
-  );
+/** A plain text box, labelled by the `SubField` or `IconRow` around it. */
+function TextInput({ value, onChange, placeholder, maxLength = 200, autoFocus, mono }: { value: string; onChange: (value: string) => void; placeholder?: string; maxLength?: number; autoFocus?: boolean; mono?: boolean }) {
+  return <input className={cn('brutalist-input', mono && 'font-mono uppercase placeholder:normal-case')} value={value} maxLength={maxLength} placeholder={placeholder} autoFocus={autoFocus} onChange={(event) => onChange(event.target.value)} />;
 }
 
-function WhenField({ label, value, onChange, id }: { label: string; value: string; onChange: (value: string) => void; id: string }) {
-  return (
-    <Field label={label} htmlFor={id}>
-      <input id={id} type="datetime-local" className="brutalist-input h-[34px] w-full" value={value} onChange={(event) => onChange(event.target.value)} />
-    </Field>
-  );
+function WhenInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return <input type="datetime-local" className="brutalist-input tabular-nums" value={value} onChange={(event) => onChange(event.target.value)} />;
 }
+
+/** An amount in a foreign currency, typed as a plain number. */
+function ForeignInput({ value, onChange, ariaLabel }: { value: number; onChange: (value: number) => void; ariaLabel?: string }) {
+  return <input aria-label={ariaLabel} inputMode="decimal" className="brutalist-input text-right tabular-nums" value={value ? String(value) : ''} placeholder="0" onChange={(event) => { const next = Number(event.target.value.replace(/[^\d.,]/g, '').replace(',', '.')); onChange(Number.isFinite(next) ? next : 0); }} />;
+}
+
+/** Nights between two `datetime-local` values, by the calendar. */
+const nightsBetween = (from: string, until: string) => (from && until ? Math.max(0, Math.round((fromDayKey(until.slice(0, 10)) - fromDayKey(from.slice(0, 10))) / 86_400_000)) : 0);
 
 /**
  * Adds or edits a booking. Each kind asks for what matters for it: a flight its airline, number and
@@ -83,12 +83,13 @@ export function BookingDialog({ goalId, trip, files, booking, initialKind = 'fli
   const busy = add.isPending || update.isPending || remove.isPending;
   const foreign = trip.basics.currency;
   const symbol = CURRENCIES.find((item) => item.code === currency)?.symbol ?? currency;
-  const id = (name: string) => `booking-${name}`;
+  // A flight can go without a name: its airline, number and airports name it.
+  const flightName = [[airline, number].filter((part) => part.trim()).join(' '), [place, to].filter((part) => part.trim()).join(' → ')].filter(Boolean).join(' ');
+  const stayNights = kind === 'stay' ? nightsBetween(startAt, endAt) : 0;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    // A flight can go without a title: its airline, number and airports name it.
-    const named = title.trim() || (kind === 'flight' ? [airline, number].filter(Boolean).join(' ') + (place || to ? ` ${[place, to].filter(Boolean).join(' → ')}` : '') : '');
+    const named = title.trim() || (kind === 'flight' ? flightName : '');
     if (!named.trim()) return setError('Give it a name.');
     const start = fromWallInput(startAt);
     const end = fromWallInput(endAt);
@@ -129,28 +130,16 @@ export function BookingDialog({ goalId, trip, files, booking, initialKind = 'fli
     }
   };
 
-  const costField = (
-    <Field label="Cost" htmlFor={id('cost')} info={foreign ? `Priced in rupiah or ${foreign}; ${foreign} is counted in rupiah at the trip’s rate.` : undefined}>
-      <div className="flex gap-2">
-        {foreign && <Segmented ariaLabel="Currency" value={currency} options={[{ value: 'IDR', label: 'Rp' }, { value: foreign, label: foreign }]} onChange={setCurrency} />}
-        <div className="min-w-0 flex-1">
-          {currency === 'IDR'
-            ? <MoneyField id={id('cost')} value={cost} onChange={setCost} />
-            : <input id={id('cost')} inputMode="decimal" className="brutalist-input h-[34px] w-full text-right tabular-nums" value={cost ? String(cost) : ''} placeholder="0" onChange={(event) => { const value = Number(event.target.value.replace(/[^\d.,]/g, '').replace(',', '.')); setCost(Number.isFinite(value) ? value : 0); }} />}
-        </div>
-      </div>
-      {currency !== 'IDR' && cost > 0 && (
-        <p className="text-xs text-[var(--ref-on-surface-variant)]">
-          {trip.basics.rate ? <>About <span className="font-semibold tabular-nums">{formatAmount(Math.round(cost * trip.basics.rate))}</span> at Rp{trip.basics.rate.toLocaleString('id-ID')} for {symbol}1</> : 'Set the trip’s rate to count it in rupiah.'}
-        </p>
-      )}
-    </Field>
-  );
+  const KindIcon = BOOKING_ICONS[kind];
+  const times = kind === 'stay'
+    ? { label: 'Check in and out', start: 'Check in', end: 'Check out' }
+    : kind === 'flight' ? { label: 'Times, as the clock reads there', start: 'Leaves', end: 'Lands' }
+      : kind === 'ticket' ? { label: 'When', start: 'At', end: null }
+        : { label: 'When', start: 'Starts', end: 'Ends (optional)' };
 
   return (
     <Modal
       isOpen
-      size="xl"
       onClose={() => { if (!busy) onClose(); }}
       title={booking ? `Edit ${BOOKING_KINDS[booking.kind].label.toLowerCase()}` : 'Add a booking'}
       footer={(
@@ -160,7 +149,7 @@ export function BookingDialog({ goalId, trip, files, booking, initialKind = 'fli
           onClose={onClose}
           busy={busy}
           extra={booking ? (
-            <Button type="button" size="sm" variant="danger" disabled={busy} onClick={async () => {
+            <RemoveButton disabled={busy} onClick={async () => {
               const ok = await confirm({ title: `Remove ${booking.title}?`, message: booking.paidAt ? 'Its payment stays in the breakdown.' : 'Its part of the breakdown goes with it.', confirmLabel: 'Remove', variant: 'danger' });
               if (!ok) return;
               try {
@@ -169,79 +158,102 @@ export function BookingDialog({ goalId, trip, files, booking, initialKind = 'fli
               } catch (caught) {
                 setError(errorText(caught, 'Could not remove the booking'));
               }
-            }}>Remove</Button>
+            }} />
           ) : undefined}
         />
       )}
     >
-      <form id="trip-booking" onSubmit={submit} className="settings-compact space-y-4">
+      <form id="trip-booking" onSubmit={submit} className="settings-compact space-y-5">
         <ErrorLine error={error} />
-        {!booking && <Segmented ariaLabel="Kind of booking" value={kind} options={BOOKING_KIND_KEYS.map((key) => ({ value: key, label: BOOKING_KINDS[key].label }))} onChange={setKind} />}
 
-        {kind === 'flight' ? (
-          <>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <TextField id={id('airline')} label="Airline" value={airline} onChange={setAirline} placeholder="Garuda" maxLength={60} autoFocus={!booking} />
-              <TextField id={id('number')} label="Flight number" value={number} onChange={setNumber} placeholder="GA874" maxLength={20} />
-              <TextField id={id('code')} label="Booking code" value={code} onChange={setCode} placeholder="XK7P2Q" maxLength={60} />
+        {/* What kind it is; each asks for what matters for it. */}
+        {!booking && (
+          <div role="radiogroup" aria-label="Kind of booking" className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+            {BOOKING_KIND_KEYS.map((key) => {
+              const Icon = BOOKING_ICONS[key];
+              const on = kind === key;
+              return (
+                <button key={key} type="button" role="radio" aria-checked={on} onClick={() => setKind(key)} className={cn('flex flex-col items-center gap-1 rounded-lg border px-1 py-2 text-xs font-semibold transition-colors', on ? 'border-[var(--ref-primary)] bg-[var(--ref-primary)]/10 text-[var(--ref-primary)]' : 'border-[var(--color-border)] text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-low)] hover:text-[var(--ref-on-surface)]')}>
+                  <Icon className="h-4 w-4" aria-hidden />{BOOKING_KINDS[key].label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        <TitleInput
+          ariaLabel={kind === 'stay' ? 'Where you stay' : 'Name'}
+          autoFocus={!booking && kind !== 'flight'}
+          placeholder={kind === 'flight' ? flightName || 'Named from the flight below' : BOOKING_KINDS[kind].titleHint}
+          value={title}
+          onChange={setTitle}
+          mark={<KindIcon className="h-4 w-4 text-[var(--ref-primary)]" aria-hidden />}
+        />
+
+        {kind === 'flight' && (
+          <IconRow icon={Tag} label="Flight">
+            <div className="grid grid-cols-2 gap-2">
+              <SubField label="Airline"><TextInput value={airline} onChange={setAirline} placeholder="Garuda" maxLength={60} autoFocus={!booking} /></SubField>
+              <SubField label="Flight number"><TextInput value={number} onChange={setNumber} placeholder="GA874" maxLength={20} mono /></SubField>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <TextField id={id('from')} label="From" value={place} onChange={setPlace} placeholder="Jakarta (CGK)" />
-              <TextField id={id('to')} label="To" value={to} onChange={setTo} placeholder="Tokyo (HND)" />
-              <WhenField id={id('start')} label="Leaves (time there)" value={startAt} onChange={setStartAt} />
-              <WhenField id={id('end')} label="Lands (time there)" value={endAt} onChange={setEndAt} />
+          </IconRow>
+        )}
+
+        {(kind === 'flight' || kind === 'transport') ? (
+          <IconRow icon={MapPin} label={kind === 'flight' ? 'Route' : 'Route (to is optional)'}>
+            {kind === 'transport' && <Dropdown ariaLabel="Type" value={transportType} options={TRANSPORT_TYPES.map((type) => ({ value: type, label: type }))} onChange={setTransportType} />}
+            <div className="grid grid-cols-[minmax(0,1fr)_16px_minmax(0,1fr)] items-end gap-2">
+              <SubField label={kind === 'flight' ? 'From' : 'From or pick-up'}><TextInput value={place} onChange={setPlace} placeholder={kind === 'flight' ? 'Jakarta (CGK)' : 'Tokyo Station'} /></SubField>
+              <ArrowRight className="mb-[9px] h-4 w-4 text-[var(--ref-on-surface-variant)]" aria-hidden />
+              <SubField label={kind === 'flight' ? 'To' : 'To or drop-off'}><TextInput value={to} onChange={setTo} placeholder={kind === 'flight' ? 'Tokyo (HND)' : 'Kyoto'} /></SubField>
             </div>
-            <TextField id={id('title')} label="Name (optional)" value={title} onChange={setTitle} placeholder="Named from the airline and airports when empty" maxLength={120} />
-          </>
+          </IconRow>
         ) : (
-          <>
-            <TextField id={id('title')} label={kind === 'stay' ? 'Where you stay' : 'What'} value={title} onChange={setTitle} placeholder={BOOKING_KINDS[kind].titleHint} maxLength={120} autoFocus={!booking} />
-            {kind === 'transport' && <Dropdown label="Type" value={transportType} options={TRANSPORT_TYPES.map((type) => ({ value: type, label: type }))} onChange={setTransportType} />}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {kind === 'stay' ? (
-                <>
-                  <WhenField id={id('start')} label="Check in" value={startAt} onChange={setStartAt} />
-                  <WhenField id={id('end')} label="Check out" value={endAt} onChange={setEndAt} />
-                </>
-              ) : kind === 'ticket' ? (
-                <WhenField id={id('start')} label="When" value={startAt} onChange={setStartAt} />
-              ) : (
-                <>
-                  <WhenField id={id('start')} label={kind === 'transport' ? 'Starts' : 'When'} value={startAt} onChange={setStartAt} />
-                  <WhenField id={id('end')} label="Ends (optional)" value={endAt} onChange={setEndAt} />
-                </>
-              )}
-              {kind === 'transport' ? (
-                <>
-                  <TextField id={id('from')} label="From or pick-up" value={place} onChange={setPlace} placeholder="Tokyo Station" />
-                  <TextField id={id('to')} label="To or drop-off (optional)" value={to} onChange={setTo} placeholder="Kyoto" />
-                </>
-              ) : kind !== 'stay' ? (
-                <TextField id={id('place')} label="Where" value={place} onChange={setPlace} placeholder="Toyosu, Tokyo" />
-              ) : null}
-            </div>
-            {(kind === 'stay' || kind === 'ticket') && <TextField id={id('address')} label="Address" value={address} onChange={setAddress} placeholder="For the map link" maxLength={300} />}
-            <TextField id={id('code')} label="Booking code" value={code} onChange={setCode} maxLength={60} />
-          </>
+          <IconRow icon={MapPin} label={kind === 'stay' ? 'Address' : 'Where'}>
+            {kind !== 'stay' && <TextInput value={place} onChange={setPlace} placeholder="Toyosu, Tokyo" />}
+            {(kind === 'stay' || kind === 'ticket') && <TextInput value={address} onChange={setAddress} placeholder={kind === 'stay' ? '1-2-3 Shinjuku, Tokyo' : 'Street address, for the map'} maxLength={300} />}
+          </IconRow>
         )}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {costField}
-          <Field label="Free cancellation until" htmlFor={id('cancel')} info="You’re reminded three days before it ends.">
-            <input id={id('cancel')} type="date" className="brutalist-input h-[34px] w-full" value={cancelBy} onChange={(event) => setCancelBy(event.target.value)} />
-          </Field>
-        </div>
-        {kind === 'stay' && (
-          <Field label="Deposit paid ahead" htmlFor={id('deposit')} hint="The rest is paid at the stay.">
-            {currency === 'IDR'
-              ? <MoneyField id={id('deposit')} value={deposit} onChange={setDeposit} />
-              : <input id={id('deposit')} inputMode="decimal" className="brutalist-input h-[34px] w-full text-right tabular-nums" value={deposit ? String(deposit) : ''} placeholder="0" onChange={(event) => { const value = Number(event.target.value.replace(/[^\d.,]/g, '').replace(',', '.')); setDeposit(Number.isFinite(value) ? value : 0); }} />}
-          </Field>
-        )}
+        <IconRow icon={Clock} label={times.label}>
+          <div className={cn('grid gap-2', times.end ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:max-w-[calc(50%-4px)]')}>
+            <SubField label={times.start}><WhenInput value={startAt} onChange={setStartAt} /></SubField>
+            {times.end && <SubField label={times.end}><WhenInput value={endAt} onChange={setEndAt} /></SubField>}
+          </div>
+          {stayNights > 0 && <span className="inline-block rounded-full bg-[var(--ref-surface-container-high)] px-2 py-0.5 text-xs font-medium tabular-nums text-[var(--ref-on-surface-variant)]">{stayNights} night{stayNights === 1 ? '' : 's'}</span>}
+        </IconRow>
+
+        <IconRow icon={Hash} label="Booking">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <SubField label="Booking code"><TextInput value={code} onChange={setCode} placeholder="XK7P2Q" maxLength={60} mono /></SubField>
+            <SubField label="Free cancellation until">
+              <input type="date" className="brutalist-input tabular-nums" value={cancelBy} onChange={(event) => setCancelBy(event.target.value)} />
+            </SubField>
+          </div>
+          {cancelBy && <p className="text-xs text-[var(--ref-on-surface-variant)]">You’re reminded three days before it ends.</p>}
+        </IconRow>
+
+        <IconRow icon={Wallet} label="Cost">
+          <div className="flex gap-2">
+            {foreign && <Segmented ariaLabel="Currency" value={currency} options={[{ value: 'IDR', label: 'Rp' }, { value: foreign, label: foreign }]} onChange={setCurrency} />}
+            <div className="min-w-0 flex-1">
+              {currency === 'IDR' ? <MoneyField ariaLabel="Cost" value={cost} onChange={setCost} /> : <ForeignInput ariaLabel="Cost" value={cost} onChange={setCost} />}
+            </div>
+          </div>
+          {currency !== 'IDR' && cost > 0 && (
+            <p className="text-xs text-[var(--ref-on-surface-variant)]">
+              {trip.basics.rate ? <>About <span className="font-semibold tabular-nums">{formatAmount(Math.round(cost * trip.basics.rate))}</span> at Rp{trip.basics.rate.toLocaleString('id-ID')} for {symbol}1</> : 'Set the trip’s rate to count it in rupiah.'}
+            </p>
+          )}
+          {kind === 'stay' && (
+            <SubField label="Deposit paid ahead (the rest is paid at the stay)">
+              {currency === 'IDR' ? <MoneyField value={deposit} onChange={setDeposit} /> : <ForeignInput value={deposit} onChange={setDeposit} />}
+            </SubField>
+          )}
+        </IconRow>
 
         {/* Its tickets, vouchers and confirmations, from the goal's files. */}
-        <div className="space-y-1.5">
-          <p className="text-sm font-medium text-[var(--color-text-secondary)]">Files <span className="font-normal text-[var(--ref-on-surface-variant)]">(tickets, vouchers)</span></p>
+        <IconRow icon={Paperclip} label="Tickets and vouchers">
           {files.length > 0 && (
             <ul className="max-h-40 space-y-1 overflow-y-auto">
               {files.map((file) => (
@@ -256,7 +268,7 @@ export function BookingDialog({ goalId, trip, files, booking, initialKind = 'fli
           )}
           <input ref={fileInput} type="file" className="hidden" accept="image/*,application/pdf,text/plain" onChange={(event) => { const file = event.target.files?.[0]; if (file) void attach(file); event.target.value = ''; }} />
           <Button type="button" size="sm" variant="secondary" isLoading={upload.isPending} onClick={() => fileInput.current?.click()}><Upload className="mr-1.5 inline h-3.5 w-3.5" aria-hidden />Upload a file</Button>
-        </div>
+        </IconRow>
       </form>
     </Modal>
   );
@@ -299,7 +311,7 @@ function BookingRow({ booking, files, canPay, onPay, onOpen, now }: { booking: B
           </span>
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--ref-on-surface-variant)]">
-          {route && <span>{route}</span>}
+          {route && !booking.title.includes(route) && <span>{route}</span>}
           {booking.code && <span>Code <span className="font-mono font-semibold text-[var(--ref-on-surface)]">{booking.code}</span></span>}
           {deposit !== null && <span>Deposit {costText(deposit, booking.costCurrency)}</span>}
           {mapQuery && <a href={mapsUrl(mapQuery)} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-0.5 font-medium text-[var(--ref-primary)] hover:underline">Map<ExternalLink className="h-3 w-3" aria-hidden /></a>}

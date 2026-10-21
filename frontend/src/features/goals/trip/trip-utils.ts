@@ -34,7 +34,23 @@ export type TripBooking = {
   paid: number;
 };
 
-export type TripPlan = { id: number; day: string; time: string | null; endTime?: string | null; title: string; place: string | null; cost: number; costCurrency: string; rupiah: number; sortOrder: number };
+export type TripPlan = { id: number; day: string; time: string | null; endTime?: string | null; title: string; place: string | null; cost: number; costCurrency: string; rupiah: number; color?: PlanColor | null; sortOrder: number };
+
+/** A plan's colour on the calendar; each is dark enough for white text on it. Null is the accent colour. */
+export const PLAN_COLORS = ['blue', 'teal', 'green', 'amber', 'red', 'pink', 'purple', 'graphite'] as const;
+export type PlanColor = (typeof PLAN_COLORS)[number];
+export const PLAN_COLOR_INFO: Record<PlanColor, { label: string; fill: string }> = {
+  blue: { label: 'Blue', fill: '#2563eb' },
+  teal: { label: 'Teal', fill: '#0f766e' },
+  green: { label: 'Green', fill: '#15803d' },
+  amber: { label: 'Amber', fill: '#b45309' },
+  red: { label: 'Red', fill: '#dc2626' },
+  pink: { label: 'Pink', fill: '#db2777' },
+  purple: { label: 'Purple', fill: '#7c3aed' },
+  graphite: { label: 'Graphite', fill: '#475569' },
+};
+/** The fill and text colour for a plan's block. */
+export const planFill = (color: PlanColor | null | undefined) => (color ? { background: PLAN_COLOR_INFO[color].fill, color: '#fff' } : { background: 'var(--ref-primary)', color: 'var(--color-surface)' });
 export type TripTraveller = { id: number; name: string; paying: boolean; passportExpiry: number | null };
 
 export const BOOKING_KINDS: Record<BookingKind, { label: string; plural: string; titleHint: string }> = {

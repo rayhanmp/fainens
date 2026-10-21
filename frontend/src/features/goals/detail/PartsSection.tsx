@@ -44,7 +44,7 @@ function PartRow({ part, canPay, onPay, now }: { part: GoalPart; canPay: boolean
       <li className="flex flex-wrap items-center gap-2 py-2">
         <input aria-label="Part name" className="brutalist-input h-[34px] w-full min-w-0 sm:w-auto sm:flex-1" value={name} maxLength={120} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void save(); if (event.key === 'Escape') setEditing(false); }} autoFocus />
         <div className="w-[150px]"><MoneyField ariaLabel="Part amount" value={amount} onChange={setAmount} /></div>
-        <input aria-label="Due" type="date" className="brutalist-input h-[34px] w-[150px]" value={due} onChange={(event) => setDue(event.target.value)} />
+        <input aria-label="Due" type="date" className="brutalist-input h-[34px] !w-[150px]" value={due} onChange={(event) => setDue(event.target.value)} />
         <Button type="button" size="sm" isLoading={update.isPending} onClick={() => void save()}>Save</Button>
         <Button type="button" size="sm" variant="secondary" onClick={() => setEditing(false)}>Cancel</Button>
       </li>

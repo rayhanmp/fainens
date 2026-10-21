@@ -4,7 +4,7 @@ import { cn } from '../../../lib/utils';
 import { BOOKING_ICONS } from './booking-icons';
 import { PlanDialog } from './PlanForm';
 import { useUpdatePlanMutation, type Trip } from './queries';
-import { calendarLanes, clockOf, minutesOf, wallDay, wallTime, type DayItem, type TripPlan as Plan } from './trip-utils';
+import { calendarLanes, clockOf, minutesOf, planFill, wallDay, wallTime, type DayItem, type TripPlan as Plan } from './trip-utils';
 
 const HOUR = 48;
 const SNAP = 15;
@@ -189,10 +189,10 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
     }
   };
 
-  const ghost = (start: number, end: number, label: string, solid = false) => (
+  const ghost = (start: number, end: number, label: string, plan?: Plan) => (
     <span
-      className={cn('pointer-events-none absolute inset-x-1 z-20 overflow-hidden rounded-md px-1.5 py-0.5 text-xs', solid ? 'bg-[var(--ref-primary)] text-[var(--color-surface)] shadow-lg' : 'border border-dashed border-[var(--ref-primary)] bg-[var(--ref-primary)]/15 font-semibold text-[var(--ref-primary)]')}
-      style={{ top: ((start - from * 60) / 60) * HOUR + 1, height: Math.max(18, ((end - start) / 60) * HOUR - 2) }}
+      className={cn('pointer-events-none absolute inset-x-1 z-20 overflow-hidden rounded-md px-1.5 py-0.5 text-xs', plan ? 'shadow-lg ring-2 ring-[var(--color-surface)]' : 'border border-dashed border-[var(--ref-primary)] bg-[var(--ref-primary)]/15 font-semibold text-[var(--ref-primary)]')}
+      style={{ top: ((start - from * 60) / 60) * HOUR + 1, height: Math.max(18, ((end - start) / 60) * HOUR - 2), ...(plan ? planFill(plan.color) : {}) }}
     >
       <span className="block truncate font-semibold">{label}</span>
       <span className="block truncate text-[10px] opacity-80">{span(start, end)}</span>
@@ -240,7 +240,8 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
                         type="button"
                         data-plan={item.plan.id}
                         onClick={(event) => { if (event.detail === 0) setDialog({ day: day.key, time: null, plan: item.plan }); }}
-                        className={cn('block w-full cursor-grab truncate rounded-md bg-[var(--ref-primary)]/15 px-2 py-1 text-left text-xs font-medium text-[var(--ref-on-surface)] hover:bg-[var(--ref-primary)]/25', moving && 'opacity-30')}
+                        className={cn('block w-full cursor-grab truncate rounded-md px-2 py-1 text-left text-xs font-semibold transition-[filter] hover:brightness-110', moving && 'opacity-30')}
+                        style={planFill(item.plan.color)}
                       >
                         {item.plan.title}
                       </button>
@@ -280,14 +281,14 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
                       type="button"
                       data-plan={item.plan.id}
                       onClick={(event) => { if (event.detail === 0) setDialog({ day: day.key, time: item.plan.time, plan: item.plan }); }}
-                      className={cn('group/plan absolute z-10 cursor-grab overflow-hidden rounded-md bg-[var(--ref-primary)]/20 px-1.5 py-0.5 text-left text-xs text-[var(--ref-on-surface)] ring-1 ring-inset ring-[var(--ref-primary)]/30 hover:bg-[var(--ref-primary)]/30', busy && 'opacity-30')}
-                      style={style}
+                      className={cn('group/plan absolute z-10 cursor-grab overflow-hidden rounded-md px-1.5 py-0.5 text-left text-xs ring-1 ring-[var(--color-surface)] transition-[filter] hover:brightness-110', busy && 'opacity-30')}
+                      style={{ ...style, ...planFill(item.plan.color) }}
                     >
                       <span className="block truncate font-semibold">{item.plan.title}</span>
-                      {tall > 34 && <span className="block truncate text-[10px] text-[var(--ref-on-surface-variant)]">{span(block.start, block.end)}{item.plan.place ? ` · ${item.plan.place}` : ''}</span>}
+                      {tall > 34 && <span className="block truncate text-[10px] opacity-85">{span(block.start, block.end)}{item.plan.place ? ` · ${item.plan.place}` : ''}</span>}
                       {/* Drag the bottom edge to make it longer or shorter. */}
                       <span data-resize={item.plan.id} className="absolute inset-x-0 bottom-0 h-2 cursor-ns-resize" aria-hidden>
-                        <span className="mx-auto mt-0.5 block h-0.5 w-6 rounded-full bg-[var(--ref-primary)] opacity-0 group-hover/plan:opacity-70" />
+                        <span className="mx-auto mt-0.5 block h-0.5 w-6 rounded-full bg-current opacity-0 group-hover/plan:opacity-70" />
                       </span>
                     </button>
                   );
@@ -303,8 +304,8 @@ export function TripCalendar({ goalId, trip, days, cities, today, onOpenDay }: {
 
               {/* What's being made, moved or stretched, and where a click would add a plan. */}
               {preview?.kind === 'create' && preview.day === at && ghost(preview.start, preview.end, 'New plan')}
-              {preview?.kind === 'move' && preview.day === at && preview.start !== null && ghost(preview.start, preview.end, plans.get(preview.planId)?.title ?? '', true)}
-              {preview?.kind === 'resize' && preview.day === at && ghost(preview.start, preview.end, plans.get(preview.planId)?.title ?? '', true)}
+              {preview?.kind === 'move' && preview.day === at && preview.start !== null && ghost(preview.start, preview.end, plans.get(preview.planId)?.title ?? '', plans.get(preview.planId))}
+              {preview?.kind === 'resize' && preview.day === at && ghost(preview.start, preview.end, plans.get(preview.planId)?.title ?? '', plans.get(preview.planId))}
             </div>
           ))}
         </div>

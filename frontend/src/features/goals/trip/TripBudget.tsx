@@ -36,7 +36,7 @@ export function TripBudget({ trip, target }: { trip: Trip; target: number }) {
           <span className="text-sm text-[var(--ref-on-surface-variant)]">planned of {formatAmount(target)}</span>
         </p>
         <p className={cn('mt-1 text-sm font-semibold', over ? 'text-[var(--color-warning)]' : 'text-[var(--ref-on-surface)]')}>
-          {over ? `${formatAmount(-budget.left)} over the target` : budget.left === 0 ? 'Exactly the target' : `${formatAmount(budget.left)} still to plan`}
+          {over ? `${formatAmount(-budget.left)} over the target` : budget.left === 0 ? 'Exactly the target' : `${formatAmount(budget.left)} of the target not planned yet`}
         </p>
 
         {/* The target as a track; what's planned fills it, a marker shows the target when it's passed. */}
@@ -76,10 +76,13 @@ export function TripBudget({ trip, target }: { trip: Trip; target: number }) {
                 : <span className="text-[var(--ref-on-surface-variant)]">{budget.days ? 'Set it in Trip' : 'Needs the trip’s dates'}</span>}
             </dd>
           </div>
-          <div className="flex justify-between gap-3 py-2">
-            <dt className="text-[var(--ref-on-surface-variant)]">Each paying person</dt>
-            <dd className="tabular-nums font-semibold text-[var(--ref-on-surface)]">{formatAmount(budget.perPayer)}<span className="font-normal text-[var(--ref-on-surface-variant)]"> · {budget.payers} paying</span></dd>
-          </div>
+          {/* With one person paying, their share is the whole of it. */}
+          {budget.payers > 1 && (
+            <div className="flex justify-between gap-3 py-2">
+              <dt className="text-[var(--ref-on-surface-variant)]">Each paying person</dt>
+              <dd className="tabular-nums font-semibold text-[var(--ref-on-surface)]">{formatAmount(budget.perPayer)}<span className="font-normal text-[var(--ref-on-surface-variant)]"> · {budget.payers} paying</span></dd>
+            </div>
+          )}
         </dl>
         {budget.unconverted > 0 && (
           <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--color-warning)]"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />{budget.unconverted} cost{budget.unconverted === 1 ? ' isn’t' : 's aren’t'} counted until the trip’s rate is set.</p>

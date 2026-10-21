@@ -8,6 +8,7 @@ import { Field } from '../../savings/fields';
 import { InfoHint } from '../../savings/InfoHint';
 import { Dropdown, Toggle } from '../../settings/controls';
 import { Section } from '../../subscriptions/PageParts';
+import { RemoveButton } from '../dialogs';
 import { useAddTravellerMutation, useDeleteTravellerMutation, useUpdateTravellerMutation, type Traveller, type Trip } from './queries';
 import { dayKey, daysBetween, fromDayKey, passportState, PASSPORT_MONTHS, shortDate } from './trip-utils';
 
@@ -87,12 +88,11 @@ function TravellerRow({ traveller, trip, now }: { traveller: Traveller; trip: Tr
       {visaLate && <p className="mt-2 flex items-start gap-1.5 text-xs text-[var(--color-warning)]"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />Leaving in {leavingIn} days and the visa isn’t applied for yet.</p>}
       {open && (
         <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="settings-compact mt-3 grid grid-cols-1 gap-3 rounded-xl bg-[var(--ref-surface-container-low)] p-3 sm:grid-cols-2">
-          <Field label="Name" htmlFor={`traveller-name-${traveller.id}`}>
-            <input id={`traveller-name-${traveller.id}`} className="brutalist-input h-[34px] w-full" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
-          </Field>
-          <Field label="Insurance" htmlFor={`traveller-insurance-${traveller.id}`} hint="Who with, and the policy number.">
-            <input id={`traveller-insurance-${traveller.id}`} className="brutalist-input h-[34px] w-full" value={insurance} maxLength={200} onChange={(event) => setInsurance(event.target.value)} />
-          </Field>
+          <div className="sm:col-span-2">
+            <Field label="Name" htmlFor={`traveller-name-${traveller.id}`}>
+              <input id={`traveller-name-${traveller.id}`} className="brutalist-input h-[34px] w-full" value={name} maxLength={80} onChange={(event) => setName(event.target.value)} />
+            </Field>
+          </div>
           <Field label="Passport number" htmlFor={`traveller-passport-${traveller.id}`} hint="Optional, for filling in forms.">
             <input id={`traveller-passport-${traveller.id}`} className="brutalist-input h-[34px] w-full font-mono" value={passportNumber} maxLength={30} autoComplete="off" onChange={(event) => setPassportNumber(event.target.value)} />
           </Field>
@@ -105,11 +105,16 @@ function TravellerRow({ traveller, trip, now }: { traveller: Traveller; trip: Tr
               <input id={`traveller-visa-${traveller.id}`} type="date" className="brutalist-input h-[34px] w-full" value={visaDate} onChange={(event) => setVisaDate(event.target.value)} />
             </Field>
           )}
+          <div className="sm:col-span-2">
+            <Field label="Insurance" htmlFor={`traveller-insurance-${traveller.id}`} hint="Who with, and the policy number.">
+              <input id={`traveller-insurance-${traveller.id}`} className="brutalist-input h-[34px] w-full" value={insurance} maxLength={200} onChange={(event) => setInsurance(event.target.value)} />
+            </Field>
+          </div>
           <div className="flex items-center justify-between gap-2 sm:col-span-2">
-            <Button type="button" size="sm" variant="danger" onClick={async () => {
+            <RemoveButton onClick={async () => {
               const ok = await confirm({ title: `Remove ${traveller.name}?`, message: 'Their own packing list goes with them.', confirmLabel: 'Remove', variant: 'danger' });
               if (ok) remove.mutate(traveller.id, { onError: (error) => toast.error(errorText(error, 'Could not remove them')) });
-            }}>Remove</Button>
+            }} />
             <span className="flex gap-2">
               <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
               <Button type="submit" size="sm" isLoading={update.isPending}>Save</Button>

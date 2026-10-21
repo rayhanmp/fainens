@@ -7926,6 +7926,24 @@ export type GetGoalTrip200BookingsItem = {
   sortOrder: number;
 };
 
+/**
+ * @nullable
+ */
+export type GetGoalTrip200PlansItemColor = typeof GetGoalTrip200PlansItemColor[keyof typeof GetGoalTrip200PlansItemColor] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const GetGoalTrip200PlansItemColor = {
+  blue: 'blue',
+  teal: 'teal',
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  pink: 'pink',
+  purple: 'purple',
+  graphite: 'graphite',
+} as const;
+
 export type GetGoalTrip200PlansItem = {
   /**
    * @minimum -9007199254740991
@@ -7948,6 +7966,8 @@ export type GetGoalTrip200PlansItem = {
   cost: number;
   costCurrency: string;
   rupiah: number;
+  /** @nullable */
+  color: GetGoalTrip200PlansItemColor;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -8231,6 +8251,24 @@ export type UpdateGoalTrip200BookingsItem = {
   sortOrder: number;
 };
 
+/**
+ * @nullable
+ */
+export type UpdateGoalTrip200PlansItemColor = typeof UpdateGoalTrip200PlansItemColor[keyof typeof UpdateGoalTrip200PlansItemColor] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateGoalTrip200PlansItemColor = {
+  blue: 'blue',
+  teal: 'teal',
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  pink: 'pink',
+  purple: 'purple',
+  graphite: 'graphite',
+} as const;
+
 export type UpdateGoalTrip200PlansItem = {
   /**
    * @minimum -9007199254740991
@@ -8253,6 +8291,8 @@ export type UpdateGoalTrip200PlansItem = {
   cost: number;
   costCurrency: string;
   rupiah: number;
+  /** @nullable */
+  color: UpdateGoalTrip200PlansItemColor;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -8870,6 +8910,24 @@ export type DeleteTripBooking404 = {
   [key: string]: unknown;
 };
 
+/**
+ * @nullable
+ */
+export type AddTripPlanBodyColor = typeof AddTripPlanBodyColor[keyof typeof AddTripPlanBodyColor] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripPlanBodyColor = {
+  blue: 'blue',
+  teal: 'teal',
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  pink: 'pink',
+  purple: 'purple',
+  graphite: 'graphite',
+} as const;
+
 export type AddTripPlanBody = {
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   day: string;
@@ -8900,7 +8958,27 @@ export type AddTripPlanBody = {
   cost?: number;
   /** @pattern ^[A-Z]{3}$ */
   costCurrency?: string;
+  /** @nullable */
+  color?: AddTripPlanBodyColor;
 };
+
+/**
+ * @nullable
+ */
+export type AddTripPlan201Color = typeof AddTripPlan201Color[keyof typeof AddTripPlan201Color] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const AddTripPlan201Color = {
+  blue: 'blue',
+  teal: 'teal',
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  pink: 'pink',
+  purple: 'purple',
+  graphite: 'graphite',
+} as const;
 
 export type AddTripPlan201 = {
   /**
@@ -8924,6 +9002,8 @@ export type AddTripPlan201 = {
   cost: number;
   costCurrency: string;
   rupiah: number;
+  /** @nullable */
+  color: AddTripPlan201Color;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -8940,6 +9020,24 @@ export type AddTripPlan404 = {
   error: string;
   [key: string]: unknown;
 };
+
+/**
+ * @nullable
+ */
+export type UpdateTripPlanBodyColor = typeof UpdateTripPlanBodyColor[keyof typeof UpdateTripPlanBodyColor] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripPlanBodyColor = {
+  blue: 'blue',
+  teal: 'teal',
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  pink: 'pink',
+  purple: 'purple',
+  graphite: 'graphite',
+} as const;
 
 export type UpdateTripPlanBody = {
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
@@ -8971,7 +9069,27 @@ export type UpdateTripPlanBody = {
   cost?: number;
   /** @pattern ^[A-Z]{3}$ */
   costCurrency?: string;
+  /** @nullable */
+  color?: UpdateTripPlanBodyColor;
 };
+
+/**
+ * @nullable
+ */
+export type UpdateTripPlan200Color = typeof UpdateTripPlan200Color[keyof typeof UpdateTripPlan200Color] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const UpdateTripPlan200Color = {
+  blue: 'blue',
+  teal: 'teal',
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  pink: 'pink',
+  purple: 'purple',
+  graphite: 'graphite',
+} as const;
 
 export type UpdateTripPlan200 = {
   /**
@@ -8995,6 +9113,8 @@ export type UpdateTripPlan200 = {
   cost: number;
   costCurrency: string;
   rupiah: number;
+  /** @nullable */
+  color: UpdateTripPlan200Color;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991
@@ -9034,6 +9154,24 @@ export type MoveTripPlansBody = {
   ids: number[];
 };
 
+/**
+ * @nullable
+ */
+export type MoveTripPlans200ItemColor = typeof MoveTripPlans200ItemColor[keyof typeof MoveTripPlans200ItemColor] | null;
+
+
+// eslint-disable-next-line @typescript-eslint/no-redeclare
+export const MoveTripPlans200ItemColor = {
+  blue: 'blue',
+  teal: 'teal',
+  green: 'green',
+  amber: 'amber',
+  red: 'red',
+  pink: 'pink',
+  purple: 'purple',
+  graphite: 'graphite',
+} as const;
+
 export type MoveTripPlans200Item = {
   /**
    * @minimum -9007199254740991
@@ -9056,6 +9194,8 @@ export type MoveTripPlans200Item = {
   cost: number;
   costCurrency: string;
   rupiah: number;
+  /** @nullable */
+  color: MoveTripPlans200ItemColor;
   /**
    * @minimum -9007199254740991
    * @maximum 9007199254740991

@@ -399,7 +399,7 @@ export function NotesEditor({ pageKey, initial, starters, searchQuery, onSave, o
                 setLinking(null);
               }}
             >
-              <input autoFocus aria-label="Link address" value={linking} onChange={(event) => setLinking(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setLinking(null); }} className="brutalist-input h-[30px] w-56 text-xs" />
+              <input autoFocus aria-label="Link address" value={linking} onChange={(event) => setLinking(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setLinking(null); }} className="brutalist-input h-[30px] !w-56 !py-1 text-xs" />
               <button type="submit" className="h-[30px] rounded-lg px-2 text-xs font-semibold text-[var(--ref-primary)] hover:bg-[var(--ref-surface-container-low)]">Save</button>
             </form>
           ) : (

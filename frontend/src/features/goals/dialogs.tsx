@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { useBalanceVisibility } from '../../hooks/useBalanceVisibility';
@@ -21,6 +21,56 @@ export function Footer({ formId, submitLabel, onClose, busy, extra }: { formId: 
         <Button type="submit" form={formId} size="sm" isLoading={busy}>{submitLabel}</Button>
       </div>
     </div>
+  );
+}
+
+/** One part of an editing dialog, like an event in a calendar app: an icon in the gutter, a small label, then its fields. */
+export function IconRow({ icon: Icon, label, children }: { icon: React.ElementType; label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[20px_minmax(0,1fr)] gap-x-3">
+      <Icon className="mt-0.5 h-4 w-4 text-[var(--ref-on-surface-variant)]" aria-hidden />
+      <div className="min-w-0 space-y-2">
+        <p className="text-xs font-semibold text-[var(--ref-on-surface-variant)]">{label}</p>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** A field inside an `IconRow` when it holds more than one, with its own small label. */
+export function SubField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block min-w-0 space-y-1">
+      <span className="block text-[11px] font-medium text-[var(--ref-on-surface-variant)]">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/** The big name at the top of an editing dialog, underlined instead of boxed; `mark` sits in the gutter. */
+export function TitleInput({ value, onChange, placeholder, ariaLabel, autoFocus, maxLength = 120, mark }: { value: string; onChange: (value: string) => void; placeholder: string; ariaLabel: string; autoFocus?: boolean; maxLength?: number; mark?: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[20px_minmax(0,1fr)] items-center gap-x-3">
+      <span className="grid place-items-center">{mark}</span>
+      <input
+        aria-label={ariaLabel}
+        autoFocus={autoFocus}
+        className="min-w-0 border-0 border-b-2 border-[var(--color-border)] bg-transparent pb-1.5 font-headline text-xl font-bold text-[var(--ref-on-surface)] outline-none transition-colors placeholder:font-semibold placeholder:text-[var(--ref-outline)] focus:border-[var(--ref-primary)]"
+        placeholder={placeholder}
+        value={value}
+        maxLength={maxLength}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </div>
+  );
+}
+
+/** Removing, kept quiet (red text, no fill) so Save stays the one strong button. */
+export function RemoveButton({ onClick, disabled, label = 'Remove' }: { onClick: () => void; disabled?: boolean; label?: string }) {
+  return (
+    <button type="button" disabled={disabled} onClick={onClick} className="inline-flex h-[34px] items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold text-[var(--color-danger)] transition-colors hover:bg-[var(--color-danger)]/10 disabled:opacity-50">
+      <Trash2 className="h-4 w-4" aria-hidden />{label}
+    </button>
   );
 }
 

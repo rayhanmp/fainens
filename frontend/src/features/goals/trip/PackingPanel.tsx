@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronDown, GripVertical, Sparkles, Trash2, X } from 'lucide-react';
+import { ChevronDown, GripVertical, Minus, Plus, Sparkles, X } from 'lucide-react';
 import { Button } from '../../../components/ui/Button';
 import { toast } from '../../../components/ui/useToast';
 import { cn } from '../../../lib/utils';
@@ -20,6 +20,7 @@ import {
   type PackingBag,
   type PackingCategory,
 } from './packing';
+import { CLIMATE_SOURCE, guessClimate, guessText } from './climate';
 import { useAddPackingMutation, useDeletePackingMutation, useMovePackingMutation, useUpdatePackingMutation, type PackingItem, type Trip } from './queries';
 import { tripLength } from './trip-utils';
 
@@ -31,7 +32,69 @@ const laneLabel = (lane: Lane) => (lane === 'none' ? 'Not in a bag yet' : BAG_LA
 const laneOf = (item: PackingItem): Lane => item.bag ?? 'none';
 const byOrder = (a: PackingItem, b: PackingItem) => a.sortOrder - b.sortOrder || a.id - b.id;
 
-/** One thing to pack: tick it, open it to change what it is, how many, its kind, bag and (with a group) whose it is. */
+/** Changes one thing in place: what it is, how many, its kind, its bag and (with a group) whose it is, saved together. */
+function ItemEditor({ item, trip, onClose }: { item: PackingItem; trip: Trip; onClose: () => void }) {
+  const update = useUpdatePackingMutation();
+  const [text, setText] = useState(item.text);
+  const [quantity, setQuantity] = useState(item.quantity);
+  const [category, setCategory] = useState<PackingCategory>(item.category);
+  const [lane, setLane] = useState<Lane>(laneOf(item));
+  const [whose, setWhose] = useState(String(item.travellerId ?? 'shared'));
+  const group = trip.travellers.length > 1;
+  const step = (by: number) => setQuantity((current) => Math.min(99, Math.max(1, current + by)));
+  const stepper = 'grid h-full w-8 place-items-center text-[var(--ref-on-surface-variant)] transition-colors hover:bg-[var(--ref-surface-container-high)] hover:text-[var(--ref-on-surface)] disabled:opacity-40 disabled:hover:bg-transparent';
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!text.trim()) return;
+    update.mutate(
+      { id: item.id, text: text.trim(), quantity, category, bag: lane === 'none' ? null : lane, ...(group ? { travellerId: whose === 'shared' ? null : Number(whose) } : {}) },
+      { onSuccess: onClose, onError: (error) => toast.error(errorText(error, 'Could not save')) },
+    );
+  };
+
+  return (
+    <li className="my-2">
+      <form onSubmit={submit} onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }} className="settings-compact space-y-3 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3 shadow-sm">
+        <div className="flex items-end gap-2">
+          <label className="min-w-0 flex-1 space-y-1">
+            <span className="block text-xs font-medium text-[var(--color-text-secondary)]">What</span>
+            <input autoFocus className="brutalist-input" value={text} maxLength={120} onChange={(event) => setText(event.target.value)} />
+          </label>
+          <div className="space-y-1">
+            <span className="block text-xs font-medium text-[var(--color-text-secondary)]">How many</span>
+            <div className="flex h-[34px] items-stretch overflow-hidden rounded-[var(--radius-sm)] border border-[var(--color-border)] bg-[var(--color-surface)]">
+              <button type="button" aria-label="One fewer" disabled={quantity <= 1} onClick={() => step(-1)} className={stepper}><Minus className="h-3.5 w-3.5" aria-hidden /></button>
+              <span className="grid w-8 place-items-center text-sm font-semibold tabular-nums text-[var(--ref-on-surface)]" aria-live="polite">{quantity}</span>
+              <button type="button" aria-label="One more" disabled={quantity >= 99} onClick={() => step(1)} className={stepper}><Plus className="h-3.5 w-3.5" aria-hidden /></button>
+            </div>
+          </div>
+        </div>
+        <div className={cn('grid grid-cols-1 gap-2', group ? '@md:grid-cols-3' : '@md:grid-cols-2')}>
+          <LabelledDropdown label="Kind" value={category} options={PACKING_CATEGORIES.map((value) => ({ value, label: CATEGORY_LABELS[value] }))} onChange={setCategory} />
+          <LabelledDropdown label="Bag" value={lane} options={LANES.map((value) => ({ value, label: laneLabel(value) }))} onChange={setLane} />
+          {group && <LabelledDropdown label="Whose" value={whose} options={[{ value: 'shared', label: 'Everyone’s' }, ...trip.travellers.map((traveller) => ({ value: String(traveller.id), label: traveller.name }))]} onChange={setWhose} />}
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button type="button" size="sm" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" size="sm" isLoading={update.isPending} disabled={!text.trim()}>Save</Button>
+        </div>
+      </form>
+    </li>
+  );
+}
+
+/** A dropdown with a small label above it, sized like the editor's other labels. */
+function LabelledDropdown<T extends string>({ label, ...props }: { label: string; value: T; options: Array<{ value: T; label: string }>; onChange: (value: T) => void }) {
+  return (
+    <div className="space-y-1">
+      <span className="block text-xs font-medium text-[var(--color-text-secondary)]" aria-hidden>{label}</span>
+      <Dropdown ariaLabel={label} {...props} />
+    </div>
+  );
+}
+
+/** One thing to pack: tick it, open it to change it, or take it off the list. */
 function ItemRow({ item, trip, showOwner, draggable, dragging, dropBefore, onDragStart, onDragEnd, onDragOver }: {
   item: PackingItem;
   trip: Trip;
@@ -46,33 +109,10 @@ function ItemRow({ item, trip, showOwner, draggable, dragging, dropBefore, onDra
   const update = useUpdatePackingMutation();
   const remove = useDeletePackingMutation();
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(item.text);
-  const [quantity, setQuantity] = useState(String(item.quantity));
   const owner = item.travellerId === null ? null : trip.travellers.find((traveller) => traveller.id === item.travellerId);
   const save = (patch: Parameters<typeof update.mutate>[0]) => update.mutate(patch, { onError: (error) => toast.error(errorText(error, 'Could not save')) });
 
-  if (editing) {
-    return (
-      <li className="my-1 space-y-2 rounded-xl bg-[var(--ref-surface-container-low)] p-2.5">
-        <div className="flex gap-2">
-          <input aria-label="What" autoFocus className="brutalist-input h-[34px] min-w-0 flex-1" value={text} maxLength={120} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setEditing(false); }} />
-          <input aria-label="How many" inputMode="numeric" className="brutalist-input h-[34px] w-[64px] text-center tabular-nums" value={quantity} onChange={(event) => setQuantity(event.target.value.replace(/\D/g, '').slice(0, 2))} />
-        </div>
-        <div className={cn('grid grid-cols-1 gap-2', trip.travellers.length > 1 ? '@md:grid-cols-3' : '@md:grid-cols-2')}>
-          <Dropdown ariaLabel="Kind" value={item.category} options={PACKING_CATEGORIES.map((category) => ({ value: category, label: CATEGORY_LABELS[category] }))} onChange={(category) => save({ id: item.id, category })} />
-          <Dropdown ariaLabel="Bag" value={item.bag ?? 'none'} options={LANES.map((lane) => ({ value: lane, label: laneLabel(lane) }))} onChange={(lane) => save({ id: item.id, bag: lane === 'none' ? null : lane })} />
-          {trip.travellers.length > 1 && <Dropdown ariaLabel="Whose" value={String(item.travellerId ?? 'shared')} options={[{ value: 'shared', label: 'Everyone’s' }, ...trip.travellers.map((traveller) => ({ value: String(traveller.id), label: traveller.name }))]} onChange={(value) => save({ id: item.id, travellerId: value === 'shared' ? null : Number(value) })} />}
-        </div>
-        <div className="flex items-center justify-between">
-          <button type="button" aria-label={`Remove ${item.text}`} onClick={() => remove.mutate(item.id, { onError: (error) => toast.error(errorText(error, 'Could not remove it')) })} className="grid h-[30px] w-[30px] place-items-center rounded-lg text-[var(--ref-on-surface-variant)] hover:bg-[var(--ref-surface-container-high)]"><Trash2 className="h-3.5 w-3.5" aria-hidden /></button>
-          <span className="flex gap-2">
-            <Button type="button" size="sm" variant="secondary" onClick={() => setEditing(false)}>Close</Button>
-            <Button type="button" size="sm" disabled={!text.trim()} onClick={() => { save({ id: item.id, text: text.trim(), quantity: Math.max(1, Number(quantity) || 1) }); setEditing(false); }}>Save</Button>
-          </span>
-        </div>
-      </li>
-    );
-  }
+  if (editing) return <ItemEditor item={item} trip={trip} onClose={() => setEditing(false)} />;
 
   return (
     <li
@@ -84,7 +124,7 @@ function ItemRow({ item, trip, showOwner, draggable, dragging, dropBefore, onDra
     >
       {draggable && <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-[var(--ref-outline)] opacity-0 group-hover:opacity-100" aria-hidden />}
       <input type="checkbox" className="h-4 w-4 shrink-0 accent-[var(--ref-primary)]" checked={item.done} aria-label={item.text} onChange={(event) => save({ id: item.id, done: event.target.checked })} />
-      <button type="button" onClick={() => { setText(item.text); setQuantity(String(item.quantity)); setEditing(true); }} className="min-w-0 flex-1 text-left">
+      <button type="button" onClick={() => setEditing(true)} className="min-w-0 flex-1 text-left">
         <span className={cn('text-sm', item.done ? 'text-[var(--ref-on-surface-variant)] line-through' : 'text-[var(--ref-on-surface)]')}>
           {item.text}
           {item.quantity > 1 && <span className="ml-1.5 text-xs font-semibold tabular-nums text-[var(--ref-on-surface-variant)]">×{item.quantity}</span>}
@@ -107,7 +147,8 @@ function ItemRow({ item, trip, showOwner, draggable, dragging, dropBefore, onDra
 /** Builds a starter list from the weather, how long the trip is and what you'll do; only what's missing is added. */
 function Starter({ goalId, trip, onDone }: { goalId: number; trip: Trip; onDone?: () => void }) {
   const add = useAddPackingMutation();
-  const [climate, setClimate] = useState<'cold' | 'warm' | 'mixed'>(trip.basics.climate ?? 'warm');
+  const guess = guessClimate(trip.basics.places, trip.basics.startDate, trip.basics.endDate);
+  const [climate, setClimate] = useState<'cold' | 'warm' | 'mixed'>(trip.basics.climate ?? guess?.climate ?? 'warm');
   const [activities, setActivities] = useState<Activity[]>(['city']);
   const [days, setDays] = useState(String(tripLength(trip.basics) || 7));
   const items = starterList({ climate, activities, days: Number(days) || 1, travellers: trip.travellers, existing: trip.packing });
@@ -118,9 +159,12 @@ function Starter({ goalId, trip, onDone }: { goalId: number; trip: Trip; onDone?
       <p className="flex items-center gap-2 text-sm font-semibold text-[var(--ref-on-surface)]"><Sparkles className="h-4 w-4 text-[var(--ref-primary)]" aria-hidden />A list for this trip</p>
       <p className="mt-1 text-xs text-[var(--ref-on-surface-variant)]">{trip.travellers.length ? 'Each person gets their own things, and the group shares the rest.' : 'Add who’s going first to give each person their own list.'} Amounts follow the days: a pair of socks a day, tops to wear twice.</p>
       <div className="settings-compact mt-3 grid grid-cols-1 gap-3 @lg:grid-cols-[minmax(0,1fr)_90px]">
-        <Segmented ariaLabel="Weather" value={climate} onChange={setClimate} options={[{ value: 'cold', label: 'Cold' }, { value: 'warm', label: 'Warm' }, { value: 'mixed', label: 'Some of each' }]} />
+        <div className="space-y-1">
+          <Segmented ariaLabel="Weather" value={climate} onChange={setClimate} options={[{ value: 'cold', label: 'Cold' }, { value: 'warm', label: 'Warm' }, { value: 'mixed', label: 'Some of each' }]} />
+          {!trip.basics.climate && guess && <p className="text-xs text-[var(--ref-on-surface-variant)]" title={CLIMATE_SOURCE}>Guessed from where and when: {guessText(guess)}.</p>}
+        </div>
         <label className="flex items-center gap-2 text-xs text-[var(--ref-on-surface-variant)]">
-          <input aria-label="Days" inputMode="numeric" className="brutalist-input h-[34px] w-[52px] text-center tabular-nums" value={days} onChange={(event) => setDays(event.target.value.replace(/\D/g, '').slice(0, 2))} />
+          <input aria-label="Days" inputMode="numeric" className="brutalist-input !w-[52px] text-center tabular-nums" value={days} onChange={(event) => setDays(event.target.value.replace(/\D/g, '').slice(0, 2))} />
           days
         </label>
       </div>
@@ -159,7 +203,7 @@ function QuickAdd({ goalId, trip, who }: { goalId: number; trip: Trip; who: Who 
   return (
     <form onSubmit={(event) => { event.preventDefault(); submit(); }} className="settings-compact flex flex-wrap items-center gap-2">
       <div className="relative min-w-0 flex-1">
-        <input aria-label="Add something to pack" className="brutalist-input h-[34px] w-full pr-28" placeholder="Add something, like “socks x7”" value={text} maxLength={120} onChange={(event) => setText(event.target.value)} />
+        <input aria-label="Add something to pack" className="brutalist-input !pr-28" placeholder="Add something, like “socks x7”" value={text} maxLength={120} onChange={(event) => setText(event.target.value)} />
         {text.trim() && <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-[var(--ref-surface-container-high)] px-2 py-px text-[11px] text-[var(--ref-on-surface-variant)]">{CATEGORY_LABELS[category]}</span>}
       </div>
       {trip.travellers.length > 1 && (

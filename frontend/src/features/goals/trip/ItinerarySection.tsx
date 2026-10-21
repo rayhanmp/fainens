@@ -8,12 +8,12 @@ import { Segmented } from '../../savings/fields';
 import { Dropdown } from '../../settings/controls';
 import { Section } from '../../subscriptions/PageParts';
 import { BOOKING_ICONS } from './booking-icons';
-import { PlanForm } from './PlanForm';
+import { PlanDialog } from './PlanForm';
 import { useMovePlansMutation, type Trip } from './queries';
 import { TripCalendar } from './TripCalendar';
 import { downloadCalendar, printItinerary } from './trip-export';
 import { useUpdateGoalMutation } from '../queries';
-import { costText, dayCities, dayKey, dayLabel, itinerary, mapsUrl, partOfDay, PARTS_OF_DAY, type DayItem, type PartOfDay, type TripPlan as Plan } from './trip-utils';
+import { costText, dayCities, dayKey, dayLabel, itinerary, mapsUrl, partOfDay, PARTS_OF_DAY, planFill, type DayItem, type PartOfDay, type TripPlan as Plan } from './trip-utils';
 
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 const ROLE: Record<string, string> = { leave: 'Leaves', arrive: 'Lands', 'check-in': 'Check in', 'check-out': 'Check out' };
@@ -53,7 +53,10 @@ function ItemRow({ item, onEdit, dragging, onDragStart, onDragEnd, onDragOverPla
       className={cn('group relative flex items-start gap-3 py-2', dragging && 'opacity-40', dropBefore && 'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:rounded-full before:bg-[var(--ref-primary)]')}
     >
       <span className="w-11 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-[var(--ref-on-surface-variant)]">{plan.time ?? ''}{plan.time && plan.endTime && <span className="block font-normal">–{plan.endTime}</span>}</span>
-      <GripVertical className="mt-0.5 h-4 w-4 shrink-0 cursor-grab text-[var(--ref-on-surface-variant)] opacity-50 group-hover:opacity-100" aria-hidden />
+      <span className="relative mt-0.5 grid h-4 w-4 shrink-0 cursor-grab place-items-center">
+        <span className="h-2.5 w-2.5 rounded-[3px] transition-opacity group-hover:opacity-0" style={{ background: planFill(plan.color).background }} aria-hidden />
+        <GripVertical className="absolute inset-0 h-4 w-4 text-[var(--ref-on-surface-variant)] opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+      </span>
       <div className="min-w-0 flex-1">
         <button type="button" onClick={() => onEdit(plan)} className="block max-w-full text-left text-sm text-[var(--ref-on-surface)] hover:underline">{plan.title}</button>
         {plan.place && <a href={mapsUrl(plan.place)} target="_blank" rel="noreferrer noopener" className="inline-flex max-w-full items-center gap-0.5 text-xs font-medium text-[var(--ref-primary)] hover:underline"><span className="truncate">{plan.place}</span><ExternalLink className="h-3 w-3 shrink-0" aria-hidden /></a>}
@@ -75,7 +78,7 @@ function CityPicker({ city, places, onChange }: { city: string; places: string[]
   if (typing || !places.length) {
     return (
       <form onSubmit={(event) => { event.preventDefault(); if (draft.trim()) onChange(draft.trim()); setTyping(false); }} className="flex items-center gap-1.5">
-        <input aria-label="City" autoFocus={typing} className="brutalist-input h-[30px] w-[150px] text-sm" placeholder="Which city?" value={draft} maxLength={80} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (draft.trim() && draft.trim() !== city) onChange(draft.trim()); setTyping(false); }} />
+        <input aria-label="City" autoFocus={typing} className="brutalist-input h-[30px] !w-[150px] !py-1 text-sm" placeholder="Which city?" value={draft} maxLength={80} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (draft.trim() && draft.trim() !== city) onChange(draft.trim()); setTyping(false); }} />
       </form>
     );
   }
@@ -103,8 +106,7 @@ export function ItinerarySection({ goalId, goalName, trip, typeData, now }: { go
   const move = useMovePlansMutation(goalId);
   const updateGoal = useUpdateGoalMutation();
   const [view, setView] = useState<'calendar' | 'day'>('calendar');
-  const [editing, setEditing] = useState<number | null>(null);
-  const [formKey, setFormKey] = useState(0);
+  const [dialog, setDialog] = useState<{ day: string; plan?: Plan } | null>(null);
   const [dragged, setDragged] = useState<Plan | null>(null);
   const [overDay, setOverDay] = useState<string | null>(null);
   const { days, elsewhere } = itinerary(trip.basics, trip.bookings, trip.plans);
@@ -162,7 +164,7 @@ export function ItinerarySection({ goalId, goalName, trip, typeData, now }: { go
                   role="tab"
                   aria-selected={isSelected}
                   ref={isSelected ? (node) => node?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) : undefined}
-                  onClick={() => { setPicked(day.key); setEditing(null); }}
+                  onClick={() => setPicked(day.key)}
                   onDragOver={(event) => { if (!dragged) return; event.preventDefault(); if (overDay !== day.key) setOverDay(day.key); }}
                   onDragLeave={() => { if (overDay === day.key) setOverDay(null); }}
                   onDrop={(event) => { event.preventDefault(); moveTo(day.key); }}
@@ -175,9 +177,11 @@ export function ItinerarySection({ goalId, goalName, trip, typeData, now }: { go
                   <span className={cn('text-[11px] font-bold uppercase tracking-wide', isSelected ? 'text-[var(--ref-primary)]' : 'text-[var(--ref-on-surface-variant)]')}>Day {day.index}{day.key === today ? ' · today' : ''}</span>
                   <span className="text-sm font-semibold text-[var(--ref-on-surface)]">{new Date(day.noon).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric' })}</span>
                   <span className="truncate text-xs text-[var(--ref-on-surface-variant)]">{cities[at] || '—'}</span>
-                  {/* How full the day is: a dot a thing, up to four. */}
+                  {/* How full the day is: a dot a thing, up to four, in each plan's colour. */}
                   <span className="mt-1.5 flex h-1.5 gap-0.5" aria-label={`${count} thing${count === 1 ? '' : 's'}`}>
-                    {count === 0 ? <span className="h-1.5 w-1.5 rounded-full border border-[var(--ref-outline)]" /> : Array.from({ length: Math.min(4, count) }, (_, dot) => <span key={dot} className="h-1.5 w-1.5 rounded-full bg-[var(--ref-primary)]" />)}
+                    {count === 0
+                      ? <span className="h-1.5 w-1.5 rounded-full border border-[var(--ref-outline)]" />
+                      : day.items.slice(0, 4).map((item, dot) => <span key={dot} className="h-1.5 w-1.5 rounded-full" style={{ background: item.type === 'plan' ? planFill(item.plan.color).background : 'var(--ref-outline)' }} />)}
                   </span>
                 </button>
               );
@@ -215,20 +219,16 @@ export function ItinerarySection({ goalId, goalName, trip, typeData, now }: { go
                   ) : (
                     <ul className="rounded-lg bg-[var(--ref-surface-container-low)] px-2">
                       {items.map((item) => (
-                        item.type === 'plan' && editing === item.plan.id
-                          ? <li key={`plan-${item.plan.id}`}><PlanForm goalId={goalId} trip={trip} day={selected.key} days={keys} plan={item.plan} onDone={() => setEditing(null)} /></li>
-                          : (
-                            <ItemRow
-                              key={item.type === 'plan' ? `plan-${item.plan.id}` : `${item.role}-${item.booking.id}`}
-                              item={item}
-                              onEdit={(plan) => setEditing(plan.id)}
-                              dragging={item.type === 'plan' && dragged?.id === item.plan.id}
-                              onDragStart={setDragged}
-                              onDragEnd={() => { setDragged(null); setOverDay(null); }}
-                              onDragOverPlan={() => {}}
-                              dropBefore={false}
-                            />
-                          )
+                        <ItemRow
+                          key={item.type === 'plan' ? `plan-${item.plan.id}` : `${item.role}-${item.booking.id}`}
+                          item={item}
+                          onEdit={(plan) => setDialog({ day: selected.key, plan })}
+                          dragging={item.type === 'plan' && dragged?.id === item.plan.id}
+                          onDragStart={setDragged}
+                          onDragEnd={() => { setDragged(null); setOverDay(null); }}
+                          onDragOverPlan={() => {}}
+                          dropBefore={false}
+                        />
                       ))}
                     </ul>
                   )}
@@ -237,10 +237,9 @@ export function ItinerarySection({ goalId, goalName, trip, typeData, now }: { go
             </div>
             {selected.sleep && <p className="mt-3 flex items-center gap-1.5 text-sm text-[var(--ref-on-surface-variant)]"><BedDouble className="h-4 w-4" aria-hidden />Night at <span className="font-medium text-[var(--ref-on-surface)]">{selected.sleep.title}</span></p>}
 
-            <div className="mt-4 border-t border-[var(--color-border)] pt-3">
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-[var(--ref-on-surface)]"><Plus className="h-4 w-4" aria-hidden />Add to this day</p>
-              <PlanForm key={`${selected.key}:${formKey}`} goalId={goalId} trip={trip} day={selected.key} days={keys} onDone={() => setFormKey((value) => value + 1)} />
-              <p className="text-xs text-[var(--ref-on-surface-variant)]">Without a time it goes under Any time. Drag a plan onto another day above to move it.</p>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] pt-3">
+              <p className="text-xs text-[var(--ref-on-surface-variant)]">Drag a plan onto another day above to move it.</p>
+              <Button type="button" size="sm" onClick={() => setDialog({ day: selected.key })}><Plus className="mr-1 inline h-4 w-4" aria-hidden />Add a plan</Button>
             </div>
           </div>
         </>
@@ -250,13 +249,12 @@ export function ItinerarySection({ goalId, goalName, trip, typeData, now }: { go
           <p className="text-xs font-semibold text-[var(--ref-on-surface-variant)]">Not on a day of the trip any more. Open one to move it.</p>
           <ul className="mt-1">
             {elsewhere.map((plan) => (
-              editing === plan.id
-                ? <li key={plan.id}><PlanForm goalId={goalId} trip={trip} day={keys[0] ?? plan.day} days={keys} plan={plan} onDone={() => setEditing(null)} /></li>
-                : <li key={plan.id}><button type="button" onClick={() => setEditing(plan.id)} className="py-1 text-left text-sm text-[var(--ref-on-surface)] hover:underline">{dayLabel(plan.day)} · {plan.title}</button></li>
+              <li key={plan.id}><button type="button" onClick={() => setDialog({ day: keys[0] ?? plan.day, plan })} className="py-1 text-left text-sm text-[var(--ref-on-surface)] hover:underline">{dayLabel(plan.day)} · {plan.title}</button></li>
             ))}
           </ul>
         </div>
       )}
+      {dialog && <PlanDialog goalId={goalId} trip={trip} day={dialog.day} days={keys} plan={dialog.plan} onClose={() => setDialog(null)} />}
     </Section>
   );
 }

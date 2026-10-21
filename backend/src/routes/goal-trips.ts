@@ -19,6 +19,7 @@ import {
   tripBasics,
   tripDetail,
   PACKING_BAGS,
+  PLAN_COLORS,
   PACKING_CATEGORIES,
   tripGoal,
   VISA_STATUSES,
@@ -93,6 +94,7 @@ const planSchema = z.object({
   cost: z.number(),
   costCurrency: z.string(),
   rupiah: z.number(),
+  color: z.enum(PLAN_COLORS).nullable(),
   sortOrder: z.number().int(),
 });
 const packingSchema = z.object({
@@ -160,6 +162,7 @@ const planBody = z.object({
   place: optionalText(200),
   cost: cost.optional(),
   costCurrency: currency.optional(),
+  color: z.enum(PLAN_COLORS).nullable().optional(),
 }).strict();
 const packingBody = z.object({
   text: text(120),

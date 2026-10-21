@@ -16,7 +16,7 @@ import { CompleteGoalDialog, GoalDialog, MoveMoneyDialog, PayFromGoalDialog, typ
 import { NotesWorkspace } from '../features/goals/notes/NotesWorkspace';
 import { useTripQuery } from '../features/goals/trip/queries';
 import { TripIllustration } from '../features/goals/trip/TripIllustration';
-import { TripSettingsDialog, TripSummary } from '../features/goals/trip/TripSummary';
+import { TripSummary } from '../features/goals/trip/TripSummary';
 import { TripWorkspace, type TripTab } from '../features/goals/trip/TripWorkspace';
 import { TypeArt } from '../features/goals/types/TypeArt';
 import { TypePanel } from '../features/goals/types/TypePanel';
@@ -137,7 +137,7 @@ function GoalPage() {
                 {trip ? (
                   // A holiday plans its trip in tabs; the trip's facts sit beside, and above the tabs on narrow screens.
                   <>
-                    <div className="xl:hidden"><TripSummary trip={trip} now={now} onEdit={() => setEditingTrip(true)} onPeople={() => setTripTab('people')} /></div>
+                    <div className="xl:hidden"><TripSummary goalId={id} trip={trip} now={now} editing={editingTrip} onEditing={setEditingTrip} onPeople={() => setTripTab('people')} /></div>
                     <TripWorkspace
                       detail={detail}
                       trip={trip}
@@ -146,7 +146,7 @@ function GoalPage() {
                       canPay={goal.status === 'active' && goal.setAside > 0}
                       tab={tripTab}
                       onTab={setTripTab}
-                      onEdit={() => setEditingTrip(true)}
+                      onEdit={() => { setEditingTrip(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                       onPayPart={(partId) => setPaying({ partId })}
                       onPayBreakdown={(part) => setPaying({ partId: part.id })}
                     />
@@ -162,12 +162,11 @@ function GoalPage() {
                 )}
               </div>
               <div className="space-y-6">
-                {trip && <div className="hidden xl:block"><TripSummary trip={trip} now={now} onEdit={() => setEditingTrip(true)} onPeople={() => setTripTab('people')} /></div>}
+                {trip && <div id="trip-summary" className="hidden scroll-mt-6 xl:block"><TripSummary goalId={id} trip={trip} now={now} editing={editingTrip} onEditing={setEditingTrip} onPeople={() => setTripTab('people')} /></div>}
                 <DetailsPanel detail={detail} overview={overview} />
               </div>
             </div>
 
-            {trip && editingTrip && <TripSettingsDialog goalId={id} trip={trip} onClose={() => setEditingTrip(false)} />}
             {moving && (
               <MoveMoneyDialog
                 goal={goal}

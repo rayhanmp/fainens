@@ -139,11 +139,13 @@ export function TripRecap({ goalId, trip, target, files }: { goalId: number; tri
               <td className={cn(NUMBER, 'py-2 text-[var(--ref-on-surface)]')}>{formatAmount(plannedTotal)}</td>
               <td className={cn(NUMBER, 'py-2 font-semibold text-[var(--ref-on-surface)]')}>{formatAmount(actualTotal)}</td>
             </tr>
-            <tr>
-              <td className="py-2 text-[var(--ref-on-surface-variant)]">Each paying person</td>
-              <td className={cn(NUMBER, 'py-2 text-[var(--ref-on-surface)]')}>{formatAmount(Math.round(plannedTotal / budget.payers))}</td>
-              <td className={cn(NUMBER, 'py-2 font-semibold text-[var(--ref-on-surface)]')}>{formatAmount(Math.round(actualTotal / budget.payers))}</td>
-            </tr>
+            {budget.payers > 1 && (
+              <tr>
+                <td className="py-2 text-[var(--ref-on-surface-variant)]">Each paying person</td>
+                <td className={cn(NUMBER, 'py-2 text-[var(--ref-on-surface)]')}>{formatAmount(Math.round(plannedTotal / budget.payers))}</td>
+                <td className={cn(NUMBER, 'py-2 font-semibold text-[var(--ref-on-surface)]')}>{formatAmount(Math.round(actualTotal / budget.payers))}</td>
+              </tr>
+            )}
           </tbody>
         </table>
         <p className="mt-2 text-xs text-[var(--ref-on-surface-variant)]">Bookings count what was paid from the goal; the trip counts every expense dated on its days.</p>
