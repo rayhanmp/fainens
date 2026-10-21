@@ -57,19 +57,34 @@ function optionsForMaintenance(name: MaintenanceJobName) {
   return maintenanceJobOptions;
 }
 
+/**
+ * Adds a job under a fixed id. BullMQ ignores an add whose id it still holds, including a job that
+ * already finished (kept for a while as history), so a finished one is cleared first; a job still
+ * waiting or running is kept, which is what keeps two processes from running the same work.
+ */
+export async function addFresh<Data>(queue: Queue<Data, any, any>, name: string, data: Data, options: Parameters<Queue["add"]>[2] & { jobId: string }) {
+  const existing = await queue.getJob(options.jobId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state !== "completed" && state !== "failed") return existing;
+    await existing.remove();
+  }
+  return queue.add(name as never, data as never, options);
+}
+
 /** Compatibility helper for maintenance jobs. Stable IDs make concurrent API
  * processes harmless; the durable outbox/task rows provide the real replay
  * guarantee when a process dies between enqueue attempts.
  * BullMQ rejects ":" in custom job IDs (it separates Redis keys), so IDs use "-". */
 export async function enqueueMaintenance(name: MaintenanceJobName) {
-  return maintenanceQueue.add(name, undefined, {
+  return addFresh(maintenanceQueue, name, undefined, {
     ...optionsForMaintenance(name),
     jobId: `maintenance-${name}`,
   });
 }
 
 export async function enqueueRecurring(name: RecurringJobName) {
-  return recurringQueue.add(name, undefined, {
+  return addFresh(recurringQueue, name, undefined, {
     ...maintenanceJobOptions,
     jobId: `recurring-${name}`,
   });
@@ -85,7 +100,8 @@ export async function enqueueTask(task: {
     throw new Error(`Task queue ${task.queueName} cannot carry an agent job`);
   }
   const data = taskJobDataSchema.parse({ taskId: task.id });
-  return agentQueue.add(task.jobName, data, {
+  // A retried task reuses its id; the failed run's job is cleared so the retry actually runs.
+  return addFresh(agentQueue, task.jobName, data, {
     jobId: `task-${task.id}`,
     attempts: Math.max(1, Math.min(task.maxAttempts, 10)),
     backoff: { type: "exponential", delay: task.jobName === "budget-outlier-review" ? 30_000 : 5_000 },

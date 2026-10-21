@@ -13,7 +13,7 @@ import { pollConnectedGmail } from "../services/gmail-sync";
 import { processDueDatabaseBackup } from "../services/database-backup";
 import { cancelBackgroundTask, claimBackgroundTask, completeBackgroundTask, dispatchDueBackgroundTasks, failBackgroundTask } from "../services/background-tasks";
 import { configureJobSchedulers } from "./schedulers";
-import { agentQueue, maintenanceQueue, recurringQueue, type AgentJobName, type MaintenanceJobName, type RecurringJobName } from "./queue";
+import { agentQueue, enqueueMaintenance, enqueueRecurring, maintenanceQueue, recurringQueue, type AgentJobName, type MaintenanceJobName, type RecurringJobName } from "./queue";
 import { processAgentTask } from "./agent-task-processor";
 import { env } from "../lib/env";
 import { parseTaskJobData } from "./contracts";
@@ -94,14 +94,16 @@ async function main(): Promise<void> {
 
   // Kick the first pass immediately after boot. The scheduler then keeps the
   // queues warm without any API-process setInterval timers.
+  // These go through the enqueue helpers, which clear a finished job under the same id first:
+  // otherwise every boot after the first would be ignored.
   await Promise.all([
-    maintenanceQueue.add("dispatch-background-tasks", undefined, { jobId: "maintenance-dispatch-background-tasks" }),
-    maintenanceQueue.add("cache-invalidation-outbox", undefined, { jobId: "maintenance-cache-invalidation-outbox" }),
-    maintenanceQueue.add("storage-deletion-outbox", undefined, { jobId: "maintenance-storage-deletion-outbox" }),
-    recurringQueue.add("subscription-renewals", undefined, { jobId: "recurring-subscription-renewals" }),
-    recurringQueue.add("salary-posting", undefined, { jobId: "recurring-salary-posting" }),
-    recurringQueue.add("gmail-sync", undefined, { jobId: "recurring-gmail-sync" }),
-    recurringQueue.add("database-backup", undefined, { jobId: "recurring-database-backup" }),
+    enqueueMaintenance("dispatch-background-tasks"),
+    enqueueMaintenance("cache-invalidation-outbox"),
+    enqueueMaintenance("storage-deletion-outbox"),
+    enqueueRecurring("subscription-renewals"),
+    enqueueRecurring("salary-posting"),
+    enqueueRecurring("gmail-sync"),
+    enqueueRecurring("database-backup"),
   ]);
 
   const workers = [
