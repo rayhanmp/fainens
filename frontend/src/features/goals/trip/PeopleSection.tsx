@@ -215,7 +215,7 @@ export function PackingSection({ goalId, trip }: { goalId: number; trip: Trip })
   ];
   return (
     <Section title="Packing" aside={total > 0 ? <span className="text-xs font-semibold tabular-nums text-[var(--ref-on-surface-variant)]">{packed} of {total} packed</span> : undefined}>
-      <div className="px-4 sm:px-5">
+      <div className="@container px-4 sm:px-5">
         {total > 0 && (
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--ref-surface-container-high)]" aria-hidden>
             <div className="h-full rounded-full bg-[var(--ref-primary)] transition-[width] duration-500 motion-reduce:transition-none" style={{ width: `${(packed / total) * 100}%` }} />
@@ -229,7 +229,7 @@ export function PackingSection({ goalId, trip }: { goalId: number; trip: Trip })
             </div>
           </div>
         )}
-        <div className="grid grid-cols-1 gap-x-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-6 @lg:grid-cols-2">
           {groups.map((group) => <PackingGroup key={group.key} goalId={goalId} title={group.title} travellerId={group.travellerId} items={trip.packing.filter((item) => item.travellerId === group.travellerId)} />)}
         </div>
       </div>

@@ -6,7 +6,6 @@ import { toast } from '../../../components/ui/useToast';
 import { useBalanceVisibility } from '../../../hooks/useBalanceVisibility';
 import { MoneyField } from '../../savings/fields';
 import { Dropdown } from '../../settings/controls';
-import { Section } from '../../subscriptions/PageParts';
 import { DetailRow } from '../detail/DetailRow';
 import { useUpdateTripMutation, type Trip } from './queries';
 import { CURRENCIES, dayKey, fromDayKey, tripLength } from './trip-utils';
@@ -146,15 +145,14 @@ function SpendingRow({ trip, save }: { trip: Trip; save: Save }) {
 }
 
 /**
- * The trip beside its page, as rows: where, when, the money spent there and its rate, spending
- * money a day, and the weather (which picks the packing list). Each saves as it changes.
+ * The trip's settings, as rows: where, when, the money spent there and its rate, spending money a
+ * day, and the weather (which picks the packing list). Each saves as it changes.
  */
-export function TripRail({ goalId, trip }: { goalId: number; trip: Trip }) {
+export function TripSettings({ goalId, trip }: { goalId: number; trip: Trip }) {
   const update = useUpdateTripMutation();
   const save: Save = (body) => update.mutate({ id: goalId, ...body }, { onError: (error) => toast.error(errorText(error, 'Could not save the trip')) });
   return (
-    <Section title="Trip">
-      <div className="divide-y divide-[var(--color-border)]">
+      <div className="-mx-4 divide-y divide-[var(--color-border)] sm:-mx-5">
         <PlacesRow places={trip.basics.places} save={(places) => save({ places })} />
         <DatesRow trip={trip} save={save} />
         <MoneyRow key={`${trip.basics.currency}:${trip.basics.rate}`} trip={trip} save={save} />
@@ -172,6 +170,5 @@ export function TripRail({ goalId, trip }: { goalId: number; trip: Trip }) {
           )}
         />
       </div>
-    </Section>
   );
 }

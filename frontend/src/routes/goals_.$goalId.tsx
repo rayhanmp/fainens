@@ -14,15 +14,9 @@ import { GrowthChart } from '../features/goals/detail/GrowthChart';
 import { PartsSection } from '../features/goals/detail/PartsSection';
 import { CompleteGoalDialog, GoalDialog, MoveMoneyDialog, PayFromGoalDialog, type GoalDraft } from '../features/goals/dialogs';
 import { NotesWorkspace } from '../features/goals/notes/NotesWorkspace';
-import { BookingsSection } from '../features/goals/trip/BookingsSection';
-import { ItinerarySection } from '../features/goals/trip/ItinerarySection';
-import { PackingSection, PeopleSection } from '../features/goals/trip/PeopleSection';
 import { useTripQuery } from '../features/goals/trip/queries';
-import { TripBudget } from '../features/goals/trip/TripBudget';
 import { TripIllustration } from '../features/goals/trip/TripIllustration';
-import { TripRail } from '../features/goals/trip/TripRail';
-import { TodayPanel, TripRecap } from '../features/goals/trip/TripStatus';
-import { tripPhase } from '../features/goals/trip/trip-utils';
+import { TripWorkspace } from '../features/goals/trip/TripWorkspace';
 import { TypeArt } from '../features/goals/types/TypeArt';
 import { TypePanel } from '../features/goals/types/TypePanel';
 import { useAverageSpending, useGoalHeadline } from '../features/goals/use-headline';
@@ -75,7 +69,6 @@ function GoalPage() {
   const tripQuery = useTripQuery(id, goal?.goalType === 'trip');
   const trip = goal?.goalType === 'trip' ? tripQuery.data : undefined;
   const [now] = useState(() => Date.now());
-  const phase = trip ? tripPhase(trip.basics, now) : null;
   const firstFlight = trip?.bookings.find((booking) => booking.kind === 'flight');
 
   // Putting money in that reaches a new quarter of the target is celebrated.
@@ -138,29 +131,28 @@ function GoalPage() {
 
             <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
               <div className="min-w-0 space-y-6">
-                {trip && (
+                {trip ? (
+                  // A holiday plans its trip in tabs, with the goal's money in one of them.
+                  <TripWorkspace
+                    detail={detail}
+                    trip={trip}
+                    now={now}
+                    color={color}
+                    canPay={goal.status === 'active' && goal.setAside > 0}
+                    onPayPart={(partId) => setPaying({ partId })}
+                    onPayBreakdown={(part) => setPaying({ partId: part.id })}
+                  />
+                ) : (
                   <>
-                    {phase === 'during' && <TodayPanel trip={trip} now={now} />}
-                    {phase === 'after' && <TripRecap goalId={id} trip={trip} target={goal.targetAmount} files={detail.attachments} />}
-                    {/* Where and when sit beside the page on wide screens, and first here on narrow ones. */}
-                    <div className="xl:hidden"><TripRail goalId={id} trip={trip} /></div>
-                    <TripBudget trip={trip} target={goal.targetAmount} />
-                    <BookingsSection goalId={id} trip={trip} files={detail.attachments} canPay={goal.status === 'active' && goal.setAside > 0} onPay={(partId) => setPaying({ partId })} now={now} />
-                    <ItinerarySection goalId={id} goalName={goal.name} trip={trip} now={now} />
-                    <PeopleSection goalId={id} trip={trip} now={now} />
-                    <PackingSection goalId={id} trip={trip} />
+                    <TypePanel detail={detail} overview={overview} spending={spending} now={now} color={color} onPutIn={(note) => setMoving({ direction: 'in', note })} />
+                    <GrowthChart detail={detail} color={color} />
+                    <NotesWorkspace key={id} detail={detail} />
+                    <PartsSection detail={detail} onPay={(part) => setPaying({ partId: part.id })} />
+                    <FilesSection detail={detail} />
                   </>
                 )}
-                {!trip && <TypePanel detail={detail} overview={overview} spending={spending} now={now} color={color} onPutIn={(note) => setMoving({ direction: 'in', note })} />}
-                <GrowthChart detail={detail} color={color} />
-                <NotesWorkspace key={id} detail={detail} bookings={trip?.bookings} />
-                <PartsSection detail={detail} onPay={(part) => setPaying({ partId: part.id })} />
-                <FilesSection detail={detail} />
               </div>
-              <div className="space-y-6">
-                {trip && <div className="hidden xl:block"><TripRail goalId={id} trip={trip} /></div>}
-                <DetailsPanel detail={detail} overview={overview} />
-              </div>
+              <DetailsPanel detail={detail} overview={overview} />
             </div>
 
             {moving && (

@@ -194,6 +194,34 @@ export function itinerary(basics: TripBasics, bookings: readonly TripBooking[], 
   };
 }
 
+export type NextItem =
+  | { type: 'booking'; day: string; time: string | null; booking: TripBooking; role: 'leave' | 'arrive' | 'check-in' | 'check-out' | 'on' }
+  | { type: 'plan'; day: string; time: string | null; plan: TripPlan };
+
+/**
+ * What's coming next on the trip, in order: bookings (a flight leaving or landing, checking in or
+ * out) and plans from now on, the first few. Today's untimed things count as still to come.
+ */
+export function nextUp(bookings: readonly TripBooking[], plans: readonly TripPlan[], now: number, limit = 4): NextItem[] {
+  const today = dayKey(now);
+  const date = new Date(now);
+  const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const items: NextItem[] = [];
+  for (const booking of bookings) {
+    if (booking.startAt === null) continue;
+    const startRole = booking.kind === 'stay' ? 'check-in' : booking.kind === 'flight' ? 'leave' : 'on';
+    items.push({ type: 'booking', day: wallDay(booking.startAt), time: wallTime(booking.startAt), booking, role: startRole });
+    if (booking.endAt !== null && (booking.kind === 'stay' || booking.kind === 'flight')) {
+      items.push({ type: 'booking', day: wallDay(booking.endAt), time: wallTime(booking.endAt), booking, role: booking.kind === 'stay' ? 'check-out' : 'arrive' });
+    }
+  }
+  for (const plan of plans) items.push({ type: 'plan', day: plan.day, time: plan.time, plan });
+  return items
+    .filter((item) => item.day > today || (item.day === today && (item.time === null || item.time >= clock)))
+    .sort((a, b) => `${a.day}T${a.time ?? '00:00'}`.localeCompare(`${b.day}T${b.time ?? '00:00'}`))
+    .slice(0, limit);
+}
+
 export type TripBudget = {
   days: number;
   people: number;

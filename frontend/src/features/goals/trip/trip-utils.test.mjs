@@ -4,6 +4,7 @@ import {
   costText,
   fromWallInput,
   itinerary,
+  nextUp,
   packingStarter,
   passportState,
   toWall,
@@ -59,6 +60,16 @@ test('each day holds its bookings and plans in time order, and where you sleep',
   assert.deepEqual(days.map((day) => day.sleep?.title ?? null), ['Shinjuku hotel', 'Shinjuku hotel', null, null]);
   assert.equal(days[1].planned, 1_300_000);
   assert.deepEqual(elsewhere.map((item) => item.title), ['Moved away']);
+});
+
+test('next up lists what comes from now on, in order', () => {
+  const flight = booking({ id: 1, kind: 'flight', title: 'GA874', startAt: toWall('2027-03-10', '06:00'), endAt: toWall('2027-03-10', '15:30') });
+  const hotel = booking({ id: 2, kind: 'stay', title: 'Hotel', startAt: toWall('2027-03-10', '16:00'), endAt: toWall('2027-03-12', '11:00') });
+  const plans = [plan({ id: 9, day: '2027-03-11', time: '09:00', title: 'Meiji Shrine' }), plan({ id: 10, day: '2027-03-10', title: 'Dinner' })];
+  const read = (list) => list.map((item) => (item.type === 'plan' ? item.plan.title : `${item.role} ${item.booking.title}`));
+  assert.deepEqual(read(nextUp([flight, hotel], plans, new Date(2027, 1, 1).getTime())), ['Dinner', 'leave GA874', 'arrive GA874', 'check-in Hotel']);
+  // On the day, at noon: the morning flight is past; the untimed dinner still to come.
+  assert.deepEqual(read(nextUp([flight, hotel], plans, new Date(2027, 2, 10, 12).getTime(), 10)), ['Dinner', 'arrive GA874', 'check-in Hotel', 'Meiji Shrine', 'check-out Hotel']);
 });
 
 test('the budget counts bookings, plans and spending money against the target', () => {
