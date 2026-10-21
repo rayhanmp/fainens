@@ -9,10 +9,75 @@ type Closing = Extract<RecapStory, { id: 'closing' }>;
 const vars = (values: Record<string, string | number>) => values as CSSProperties;
 const Money = ({ value }: { value: number }) => <AnimatedValue value={value} money />;
 
-/** The newer finales (lazily loaded): a polaroid wall, a trading card, a newspaper front page, a post. */
-export function ExtraFinale({ story, form, games, run }: { story: Closing; form: 'polaroid' | 'trading' | 'frontpage' | 'post'; games: string | null; run: number }) {
+export type ExtraFinaleForm = 'polaroid' | 'trading' | 'frontpage' | 'post' | 'trophy' | 'museum' | 'weather' | 'snowglobe';
+
+/** The newer finales (lazily loaded): a polaroid wall, a trading card, a newspaper front page, a post,
+ * a trophy on its podium, a museum wall, a weather forecast and a snow globe. */
+export function ExtraFinale({ story, form, games, run }: { story: Closing; form: ExtraFinaleForm; games: string | null; run: number }) {
   const { finale, persona } = story;
   const top = finale.categories[0];
+  const Icon = personaIcons[persona.key];
+  if (form === 'trophy') {
+    // The podium ranks the top three categories; the cup is engraved with the personality it earned.
+    const podium = [finale.categories[1], finale.categories[0], finale.categories[2]];
+    return <div className="recap-trophy-stage">
+      <div className="recap-trophy" aria-hidden="true">
+        <span className="recap-trophy-cup"><Icon /><span className="recap-trophy-handle is-left" /><span className="recap-trophy-handle is-right" /></span>
+        <span className="recap-trophy-stem" />
+        <span className="recap-trophy-plaque"><small>{finale.period}</small><b>{persona.name}</b></span>
+      </div>
+      <div className="recap-trophy-podium">{podium.map((row, i) => row ? <div key={row.label} className={`recap-trophy-podium-step is-${['second', 'first', 'third'][i]}`} style={vars({ '--i': i })}>
+        <small>{row.label}</small><b>{['2', '1', '3'][i]}</b><span>{row.share}%</span>
+      </div> : <div key={i} />)}</div>
+      <p className="recap-trophy-note">{finale.purchaseCount} receipts · {finale.spendingDays} spending days{games ? ` · games ${games}` : ''}</p>
+    </div>;
+  }
+  if (form === 'museum') {
+    // The painting is the period's spending: one panel per top category, sized by its share.
+    const panels = finale.categories.length ? finale.categories : [{ label: finale.period, share: 100 }];
+    return <div className="recap-museum">
+      <i className="recap-museum-light" aria-hidden="true" />
+      <figure className="recap-museum-frame">
+        <div className="recap-museum-canvas" aria-hidden="true">{panels.map((row, i) => <span key={row.label} className={`is-${i}`} style={vars({ '--share': Math.max(12, row.share), '--i': i })} />)}<b>✳</b></div>
+      </figure>
+      <div className="recap-museum-label">
+        <b>{finale.period}</b>
+        <small>{finale.passenger} · {finale.dateLabel}</small>
+        <small>Receipts on ledger, {finale.purchaseCount} pieces</small>
+        <p>{persona.tagline}</p>
+      </div>
+    </div>;
+  }
+  if (form === 'weather') {
+    // A forecast read straight off the figures: the reading is what was left over, the outlook the top categories.
+    const sunny = finale.net >= 0;
+    return <div className="recap-weather">
+      <div className="recap-weather-now">
+        <span className={`recap-weather-icon ${sunny ? 'is-sun' : 'is-rain'}`} aria-hidden="true"><i /><i /><i /><i /></span>
+        <div>
+          <small>{finale.period}</small>
+          <b>{finale.keptShare !== null ? `${finale.keptShare}°` : `${finale.purchaseCount}`}</b>
+          <span>{sunny ? 'Clear: income ahead' : 'Showers: expenses ahead'}</span>
+        </div>
+      </div>
+      <p className="recap-weather-reading">{finale.keptShare !== null ? 'Degrees of income left over' : 'Receipts on the radar'}</p>
+      <ul className="recap-weather-outlook">{finale.categories.map((row, i) => <li key={row.label} style={vars({ '--i': i, '--share': row.share })}><small>{row.label}</small><i /><b>{row.share}%</b></li>)}</ul>
+      <p className="recap-weather-foot"><span>Gusts: {finale.peakLabel ?? 'none'}</span><span>Spending days: {finale.spendingDays}</span></p>
+      <p className="recap-weather-net">{sunny ? 'Left over' : 'Shortfall'} · <Money value={Math.abs(finale.net)} /></p>
+    </div>;
+  }
+  if (form === 'snowglobe') {
+    return <div className="recap-globe-stage">
+      <div className="recap-globe" aria-hidden="true">
+        <span className="recap-globe-glass">
+          <span className="recap-globe-scene"><Icon /></span>
+          {Array.from({ length: 22 }, (_, i) => <i key={i} className="recap-globe-snow" style={vars({ '--x': `${(i * 37 + run) % 90 + 5}%`, '--t': `${(i * 173) % 2400}ms`, '--d': `${2600 + (i * 211) % 1800}ms`, '--s': `${.8 + (i % 4) * .35}cqw` })} />)}
+        </span>
+        <span className="recap-globe-base"><small>{finale.period}</small><b>{persona.name}</b></span>
+      </div>
+      <p className="recap-globe-note">{finale.purchaseCount} receipts, shaken and settled{games ? ` · games ${games}` : ''}</p>
+    </div>;
+  }
   if (form === 'polaroid') {
     const shots = [
       { caption: finale.period, art: '✳', note: finale.dateLabel },
@@ -30,7 +95,6 @@ export function ExtraFinale({ story, form, games, run }: { story: Closing; form:
     </div>;
   }
   if (form === 'trading') {
-    const Icon = personaIcons[persona.key];
     return <div className="recap-tcard-stage">
       <div className="recap-tcard">
         <div className="recap-tcard-face">

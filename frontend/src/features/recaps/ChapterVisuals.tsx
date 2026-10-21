@@ -53,6 +53,7 @@ function ChapterVisualFor({ story, periodId, onShare, variants, run, score }: { 
     case 'bonus': return bonusExtra ? <bonusExtra.AltBonusVisual story={story} /> : <BonusVisual story={story} />;
     case 'year': return yearExtra ? <yearExtra.YearVisual story={story} /> : null;
     case 'pace': return <PaceVisual story={story} />;
+    case 'crossroads': return <CrossroadsVisual story={story} />;
     case 'budget': return <BudgetVisual story={story} periodId={periodId} gauge={variants.budget === 'gauge'} />;
     case 'categories': return <CategoriesVisual story={story} {...shared} />;
     case 'calendar': return <CalendarVisual story={story} {...shared} />;
@@ -132,6 +133,20 @@ function CoverVisual({ story, variants, run }: { story: Of<'intro'> } & Shared) 
     </div>;
     default: return <MoreCover form={variants.intro} story={story} headline={headline} second={second} run={run} />;
   }
+}
+
+/** After a crossroads game: the chapter you picked is up next, and the ones you passed on still come later. */
+function CrossroadsVisual({ story }: { story: Of<'crossroads'> }) {
+  return <ol className="recap-crossroads">
+    {story.options.map((option, i) => {
+      const next = story.chosen === option.id;
+      return <li key={option.id} className={`recap-seq${next ? ' is-next' : ''}`} style={seq(2 + i)}>
+        <b aria-hidden="true">{option.mark}</b>
+        <span>{option.teaser}</span>
+        <small>{next ? 'Up next' : story.chosen ? 'Later on' : 'In order'}</small>
+      </li>;
+    })}
+  </ol>;
 }
 
 /** Money in against money out, drawn as one of five objects a run picks. */
@@ -576,7 +591,7 @@ function ComparisonVisual({ story, variants }: { story: Of<'comparison'> } & Sha
 
 function ClosingVisual({ story, periodId, onShare, variants, run, score }: { story: Of<'closing'>; periodId: number; onShare: () => void; score: QuizScore } & Shared) {
   const random = seeded(run + 41);
-  const extraFinale = ['polaroid', 'trading', 'frontpage', 'post'].includes(variants.finale);
+  const extraFinale = ['polaroid', 'trading', 'frontpage', 'post', 'trophy', 'museum', 'weather', 'snowglobe'].includes(variants.finale);
   const finales = useLoadedPart('finales', extraFinale);
   const stars = score.total ? Math.round(score.correct / score.total * 3) : 0;
   const verdict = !score.total ? null : score.correct === score.total ? 'You know your money.' : score.correct === 0 ? 'The receipts had secrets.' : 'Pretty sharp.';
@@ -592,14 +607,15 @@ function ClosingVisual({ story, periodId, onShare, variants, run, score }: { sto
     const form = extraFinale && !finales ? 'receipt' : variants.finale;
     // The eyebrow belongs to the form the finale takes, not the copy pool's.
     const eyebrow = { receipt: 'Your receipt, please', credits: 'Roll credits', certificate: 'Graduation day', scoreboard: 'Game over',
-      polaroid: 'Snapshots', trading: 'Collector’s edition', frontpage: 'Extra! Extra!', post: 'Posted' }[form];
+      polaroid: 'Snapshots', trading: 'Collector’s edition', frontpage: 'Extra! Extra!', post: 'Posted',
+      trophy: 'And the award goes to', museum: 'Now on display', weather: 'The forecast', snowglobe: 'A keepsake' }[form];
     return <div className={`recap-finale recap-finale-${form}`}>
       <p className="recap-story-eyebrow">{eyebrow}</p>
       {form === 'receipt' && <FinaleReceipt story={story} games={games} />}
       {form === 'credits' && <FinaleCredits story={story} games={games} />}
       {form === 'certificate' && <FinaleCertificate story={story} />}
       {form === 'scoreboard' && <FinaleScoreboard story={story} games={games} />}
-      {finales && extraFinale && <finales.ExtraFinale story={story} form={variants.finale as 'polaroid' | 'trading' | 'frontpage' | 'post'} games={games} run={run} />}
+      {finales && extraFinale && <finales.ExtraFinale story={story} form={variants.finale as 'polaroid' | 'trading' | 'frontpage' | 'post' | 'trophy' | 'museum' | 'weather' | 'snowglobe'} games={games} run={run} />}
       {burst}
       {actions}
       <span className="sr-only">{finale.period}: {persona.name}</span>

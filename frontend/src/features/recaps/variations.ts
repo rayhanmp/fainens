@@ -424,7 +424,7 @@ function plainCopy(id: RecapStoryId, lead: string | undefined, f: CopyFacts): Co
         { eyebrow: 'The verdict', title: 'Your money personality is in.', body: NONE }];
     }
     // Bonus slides write their own copy from the figures that earned them; see bonusCopy.
-    case 'bonus': case 'year': case 'pace': return [];
+    case 'bonus': case 'year': case 'pace': case 'crossroads': return [];
     case 'closing': return [
       { eyebrow: 'The period, in one card', title: 'Same you. Fresh chapter.', body: NONE },
       { eyebrow: 'That’s a wrap', title: `That’s a wrap on ${f.period}.`, body: NONE },

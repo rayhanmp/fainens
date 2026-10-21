@@ -4,14 +4,15 @@ import { Fragment, lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect
 import { ArrowLeft, ArrowRight, ChevronDown, Download, Info, Music, Pause, Play, RefreshCw, Rewind, Sparkles, Trophy, Volume2, VolumeX, X } from 'lucide-react';
 import { usePeriodRecap, useRecapArchive, useRecapStory, useRegenerateRecap, useYearRecaps, type PeriodRecap, type SavedRecapStory } from './queries';
 import { combineYear, recapYear, yearEdition } from './year';
-import { buildStories, crawlText, EXTRA_GAMES, periodDateRange, themeColors, type Achievement, type RecapStory } from './stories';
+import { applyCrossroads, buildStories, crawlText, EXTRA_GAMES, periodDateRange, themeColors, type Achievement, type RecapStory } from './stories';
 import { preloadParts } from './parts';
 import { ChapterVisual, type QuizScore } from './ChapterVisuals';
 import { Burst } from './Burst';
 import { GameVerdict, PlayGate, type PlayResult } from './Games';
 import { FlavourMark } from './FlavourMark';
 import { play, playTicks, setGrooveScene, setSoundMode, silence, soundMode, startGroove, stopGroove, type Sound, type SoundMode } from './sfx';
-import { chapterStyle, enterDelay, grooveScene, lowEndDevice, nextTransition, OPENING_DURATIONS, OVERLAY_TRANSITIONS, prefersReducedMotion, runParts, runVariants, type ChapterStyle, type Opening, type SectionVariants, type Transition } from './motion';
+import { chapterStyle, enterDelay, grooveScene, lowEndDevice, nextTransition, OPENING_DURATIONS, OVERLAY_TRANSITIONS, prefersReducedMotion, runParts, runVariants, SPECTACLE_MS, SPECTACLES, type ChapterStyle, type Opening, type SectionVariants, type Spectacle, type Transition } from './motion';
+import { SpectacleScene } from './Spectacles';
 import './recaps.css';
 
 // The share card and the video recorder are only needed once someone shares.
@@ -99,7 +100,11 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   // Low-end phones get the same recap with lighter dice (no set-piece transitions).
   const lite = useMemo(() => lowEndDevice(), []);
   const variants = useMemo(() => runVariants(run, lite), [run, lite]);
-  const stories = useMemo(() => buildStories(recap, edition, run, previousAtOpen).map(story => ({ ...story, title: maskAmounts(story.title), body: maskAmounts(story.body) })), [recap, edition, run, previousAtOpen, maskAmounts]);
+  const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  const dealt = useMemo(() => buildStories(recap, edition, run, previousAtOpen).map(story => ({ ...story, title: maskAmounts(story.title), body: maskAmounts(story.body) })), [recap, edition, run, previousAtOpen, maskAmounts]);
+  // A crossroads game decides what comes next: the chapter it picked moves up to follow it.
+  const crossroadsChoice = answers.crossroads?.choice;
+  const stories = useMemo(() => applyCrossroads(dealt, crossroadsChoice), [dealt, crossroadsChoice]);
   // The run's rolled variations load during the opening, so they're ready by the time their chapter comes.
   useEffect(() => {
     const parts = runParts(variants);
@@ -119,7 +124,8 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   const [pageHidden, setPageHidden] = useState(() => document.hidden);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const regenerate = useRegenerateRecap(recap.period.id);
-  const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  // A spectacle plays for its few seconds unless a tap skips it; either way its layer is then removed.
+  const [spectacleDone, setSpectacleDone] = useState(-1);
   const [sound, setSound] = useState<SoundMode>(soundMode);
   // Music mode runs a groove under the whole recap; its tempo and chords follow the run.
   useEffect(() => {
@@ -205,6 +211,12 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
     if (transition === 'train') { play('horn', 200); play('patter', 450); }
     if (transition === 'elevator') { play('thunk', 420); play('ding', 760); play('swish', 840); }
     if (transition === 'chomp') { for (let i = 0; i < 6; i++) play('pop', 120 + i * 130); }
+    if (transition === 'fireworks') { play('riser', 100); for (let i = 0; i < 6; i++) play('pop', 1020 + i * 480); play('cymbal', 3700); }
+    if (transition === 'aurora') { play('shimmer', 300); play('chord', 1600); play('bloom', 3600); }
+    if (transition === 'deepsea') { play('pour', 0); play('patter', 1200); for (let i = 0; i < 4; i++) play('pop', 1500 + i * 420); play('swish', 3500); }
+    if (transition === 'mosaic') { playTicks(14, 1400, 100); play('shimmer', 1000); playTicks(12, 1000, 1800); play('swish', 3500); }
+    if (transition === 'coinfall') { for (let i = 0; i < 10; i++) play('coin', 300 + i * 260); play('cash', 3300); }
+    if (transition === 'lavalamp') { play('warp', 200); play('pour', 1800); play('bloom', 3600); }
     cancelToasts();
     if (!gateOf(stories[next])) {
       arrivalSounds(stories[next], enterDelay(transition), variants);
@@ -353,9 +365,17 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
     };
   }, [nav.visit, chapterCount, last, paused, shareOpen, infoOpen, regenerate.isPending, quizOpen, chapterMs]);
 
-  const overlay = OVERLAY_TRANSITIONS.has(nav.transition) && nav.visit > 0 && !reducedMotion;
+  const spectacle = SPECTACLES.has(nav.transition) && nav.visit > 0 && !reducedMotion && spectacleDone !== nav.visit;
+  const overlay = OVERLAY_TRANSITIONS.has(nav.transition) && nav.visit > 0 && !reducedMotion && (!SPECTACLES.has(nav.transition) || spectacle);
   const paper = themeColors[story.theme].paper;
-  const entering = nav.visit === 0 ? openingEnter : enterDelay(nav.transition);
+  // A skipped spectacle hands over at once.
+  const entering = nav.visit === 0 ? openingEnter : SPECTACLES.has(nav.transition) && !spectacle ? 120 : enterDelay(nav.transition);
+  useEffect(() => {
+    if (!spectacle) return;
+    const visit = nav.visit;
+    const timer = setTimeout(() => setSpectacleDone(visit), SPECTACLE_MS);
+    return () => clearTimeout(timer);
+  }, [spectacle, nav.visit]);
   return <section className="recap-viewer" aria-label={`${recap.period.name} recap`}>
     <div ref={slideRef} className={`recap-story recap-theme-${story.theme} recap-chapter-${story.id} recap-ed-${variants.edition}${opening ? ' is-opening' : ''}${party ? ' is-party' : ''}`} tabIndex={0}
       data-idle={shareOpen || infoOpen || pageHidden ? '' : undefined} aria-label="Period story. Arrow keys move between chapters, space pauses, R re-rolls."
@@ -371,6 +391,7 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
       }}
       onClick={event => {
         if ((event.target as HTMLElement).closest('button, a, select, label, summary, details, input, .recap-scratch, .recap-game, .recap-opening')) return;
+        if (spectacle) { setSpectacleDone(nav.visit); return; }
         const bounds = event.currentTarget.getBoundingClientRect();
         go(index + (event.clientX - bounds.left < bounds.width * .35 ? -1 : 1), { origin: originOf(event) });
       }}
@@ -423,6 +444,7 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
           <span className="recap-lift-head"><span className="recap-floor"><em>{nav.direction === 'next' ? '▲' : '▼'}</em><b><span><span>{nav.direction === 'next' ? index : index + 2}</span><span>{index + 1}</span></span></b></span></span>
         </>}
         {nav.transition === 'chomp' && <><i className="recap-chomp-fill" /><i className="recap-chomp-dots" /><i className="recap-chomper" /></>}
+        {spectacle && <SpectacleScene name={nav.transition as Spectacle} seed={run + nav.visit} />}
       </div>}
       <div className="recap-stage">
         {leaving && contentKey(leaving.visit, leaving.gate) !== contentKey(nav.visit, quizOpen) && <ChapterContent key={contentKey(leaving.visit, leaving.gate)} story={leaving.story} gate={leaving.gate} remix={remixOf(leaving.story)}
@@ -529,6 +551,7 @@ const soundLabels: Record<SoundMode, string> = { off: 'Sound off. Turn on effect
 const transitionSounds: Record<Transition, Sound> = {
   slide: 'whoosh', drop: 'thud', zoom: 'zoom', flip: 'flap', spin: 'whirl', glitch: 'glitch', iris: 'bloom', blinds: 'shutter', curtain: 'swish', rewind: 'rewind',
   train: 'whoosh', elevator: 'swish', chomp: 'arcade',
+  fireworks: 'whoosh', aurora: 'shimmer', deepsea: 'pour', mosaic: 'shutter', coinfall: 'coin', lavalamp: 'warp',
 };
 
 /** Sounds timed to a chapter's choreography: slot-machine ticks, stamps landing, the finale. */
@@ -588,6 +611,10 @@ function arrivalSounds(story: RecapStory, enter: number, variants: SectionVarian
     if (variants.finale === 'credits') { play('chord', enter + 300); play('fanfare', enter + 3300); }
     if (variants.finale === 'certificate') { play('fanfare', enter + 600); play('thunk', enter + 1300); }
     if (variants.finale === 'scoreboard') { play('arcade', enter + 400); playTicks(6, 1600, enter + 500); }
+    if (variants.finale === 'trophy') { play('drumroll', enter + 200); play('fanfare', enter + 1400); }
+    if (variants.finale === 'museum') { play('thunk', enter + 300); play('chord', enter + 900); }
+    if (variants.finale === 'weather') { play('chime', enter + 300); play(story.finale.net >= 0 ? 'shimmer' : 'patter', enter + 800); }
+    if (variants.finale === 'snowglobe') { play('jingle', enter + 300); play('shimmer', enter + 900); }
   }
   if (story.id === 'intro') {
     if (variants.intro === 'magazine') { playTicks(7, 700, enter); play('shutter', enter + 850); play('pop', enter + 950); }

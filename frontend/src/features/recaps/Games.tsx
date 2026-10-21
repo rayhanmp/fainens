@@ -20,9 +20,11 @@ const ExtraGame = lazy(() => loadPart('games').then(module => ({ default: module
 export function PlayGate({ play, eyebrow, seed, onDone }: { play: Play; eyebrow: string; seed: number } & GateProps) {
   const headline: Record<Play['kind'], string> = { quiz: play.kind === 'quiz' ? play.quiz.question : '', slider: play.kind === 'slider' ? play.question : '', reels: 'Spin for your top category.',
     hold: 'Ready for the big reveal?', gift: 'A little something for you.', piggy: 'Break the bank.',
-    higherLower: 'Higher or lower?', memory: 'Match your top categories.', wheel: 'Spin the wheel.', truefalse: 'True or false?' };
+    higherLower: 'Higher or lower?', memory: 'Match your top categories.', wheel: 'Spin the wheel.', truefalse: 'True or false?',
+    doors: 'Pick a door. It decides what’s next.', fork: 'Which way next?', dice: 'Roll for the next chapter.', claw: 'Grab the next chapter.' };
   const label: Record<Play['kind'], string> = { quiz: 'Quick quiz', slider: 'Take a guess', reels: 'Jackpot round', hold: 'Drumroll', gift: 'Surprise', piggy: 'Smash time',
-    higherLower: 'Higher or lower', memory: 'Memory match', wheel: 'Wheel of spending', truefalse: 'True or false' };
+    higherLower: 'Higher or lower', memory: 'Memory match', wheel: 'Wheel of spending', truefalse: 'True or false',
+    doors: 'Three doors', fork: 'Crossroads', dice: 'Lucky roll', claw: 'Claw machine' };
   return <div className={`recap-game recap-game-${play.kind}`}>
     <p className="recap-story-eyebrow">{label[play.kind]} · {eyebrow}</p>
     <h2 aria-label={headline[play.kind]}>{headline[play.kind].split(' ').map((word, i) => <span key={i}><span className="recap-word-mask"><span style={{ '--word': i } as CSSProperties}>{word}</span></span>{' '}</span>)}</h2>

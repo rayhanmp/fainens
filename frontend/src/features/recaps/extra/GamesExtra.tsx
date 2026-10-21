@@ -19,8 +19,126 @@ export function ExtraGame({ play, seed, onDone }: { play: Play; seed: number } &
     case 'memory': return <Memory play={play} seed={seed} onDone={onDone} />;
     case 'wheel': return <Wheel play={play} seed={seed} onDone={onDone} />;
     case 'truefalse': return <TrueFalse play={play} onDone={onDone} />;
+    case 'doors': return <Doors play={play} onDone={onDone} />;
+    case 'fork': return <Fork play={play} onDone={onDone} />;
+    case 'dice': return <Dice play={play} onDone={onDone} />;
+    case 'claw': return <Claw play={play} onDone={onDone} />;
     default: return null;
   }
+}
+
+// ---------- Crossroads: games whose pick decides which chapter plays next. ----------
+// Each reports the chapter it picked as its choice; applyCrossroads moves that chapter up. None is scored.
+type Crossroads = Of<'doors'> | Of<'fork'> | Of<'dice'> | Of<'claw'>;
+const picked = (play: Crossroads, index: number, verdict: string) =>
+  ({ choice: play.options[index].id, correct: false, scored: false, verdict: { text: verdict, tone: 'party' as const } });
+
+/** Three numbered doors. The one you open is what comes next; the others crack open to show they'll come later. */
+function Doors({ play, onDone }: { play: Of<'doors'> } & GateProps) {
+  const [choice, setChoice] = useState<number | null>(null);
+  const later = useLater();
+  const open = (index: number) => {
+    if (choice !== null) return;
+    setChoice(index);
+    sfx('flap'); sfx('chime', 450); sfx('swish', 1000);
+    later(() => onDone(picked(play, index, `🚪 Door ${index + 1}`)), 1900);
+  };
+  return <div className={`recap-doors${choice !== null ? ' is-picked' : ''}`} role="group" aria-label="Pick a door">
+    {play.options.map((option, i) => <button key={option.id} type="button" className={`recap-door-pick${choice === i ? ' is-open' : choice !== null ? ' is-peek' : ''}`} style={vars({ '--i': i })}
+      disabled={choice !== null} onClick={() => open(i)} aria-label={`Door ${i + 1}`}>
+      <span className="recap-door-behind"><b>{option.mark}</b><small>{option.teaser}</small></span>
+      <span className="recap-door-leaf"><b>{i + 1}</b><i /></span>
+    </button>)}
+  </div>;
+}
+
+/** A fork in the road with a signpost each way. A walker sets off down the road you pick. */
+function Fork({ play, onDone }: { play: Of<'fork'> } & GateProps) {
+  const [way, setWay] = useState<number | null>(null);
+  const later = useLater();
+  const go = (index: number) => {
+    if (way !== null) return;
+    setWay(index);
+    sfx('whoosh'); playTicks(6, 900, 200);
+    later(() => onDone(picked(play, index, `➜ The ${index === 0 ? 'left' : 'right'} road`)), 1700);
+  };
+  return <div className={`recap-fork${way === null ? '' : way === 0 ? ' is-left' : ' is-right'}`}>
+    <svg className="recap-fork-roads" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M44 100 L44 64 Q44 54 14 34 L0 26 L0 12 L22 26 Q50 44 50 56 Q50 44 78 26 L100 12 L100 26 L86 34 Q56 54 56 64 L56 100 Z" />
+    </svg>
+    <span className="recap-fork-walker" aria-hidden="true" />
+    <span className="recap-fork-post" aria-hidden="true" />
+    {play.options.slice(0, 2).map((option, i) => <button key={option.id} type="button" className={`recap-fork-sign is-${i === 0 ? 'left' : 'right'}${way === i ? ' is-chosen' : ''}`}
+      disabled={way !== null} onClick={() => go(i)}><b aria-hidden="true">{option.mark}</b><span>{option.teaser}</span></button>)}
+  </div>;
+}
+
+const DIE_FACES = '⚀⚁⚂⚃⚄⚅';
+const PIPS: Record<number, number[]> = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+/** A die you roll; the legend says which faces bring which chapter next. */
+function Dice({ play, onDone }: { play: Of<'dice'> } & GateProps) {
+  const [face, setFace] = useState<number | null>(null);
+  const [rolling, setRolling] = useState(false);
+  const later = useLater();
+  const count = play.options.length;
+  const roll = () => {
+    if (rolling || face !== null) return;
+    setRolling(true);
+    const value = 1 + Math.floor(Math.random() * 6);
+    playTicks(9, 1000);
+    later(() => { setRolling(false); setFace(value); sfx('thunk'); sfx('chime', 300); }, 1100);
+    later(() => onDone(picked(play, (value - 1) % count, `🎲 Rolled a ${value}`)), 2500);
+  };
+  const shown = face ?? 5;
+  return <div className={`recap-dice${rolling ? ' is-rolling' : ''}${face ? ' is-landed' : ''}`}>
+    <button type="button" className="recap-die" onClick={roll} disabled={rolling || face !== null} aria-label={face ? `Rolled a ${face}` : 'Roll the die'}>
+      <span className="recap-die-face">{Array.from({ length: 9 }, (_, i) => <i key={i} className={PIPS[shown].includes(i) ? 'is-pip' : undefined} />)}</span>
+    </button>
+    <p className="recap-dice-hint">{face ? `A ${face}!` : rolling ? 'Rolling…' : 'Tap the die to roll'}</p>
+    <ul className="recap-dice-legend">{play.options.map((option, i) => {
+      const faces = [1, 2, 3, 4, 5, 6].filter(value => (value - 1) % count === i);
+      return <li key={option.id} className={face && (face - 1) % count === i ? 'is-hit' : undefined}><span aria-label={`Faces ${faces.join(' and ')}`}>{faces.map(value => DIE_FACES[value - 1]).join(' ')}</span>{option.teaser}</li>;
+    })}</ul>
+  </div>;
+}
+
+/** A claw sweeps over the prizes; press Drop and it grabs whatever is beneath it. */
+function Claw({ play, onDone }: { play: Of<'claw'> } & GateProps) {
+  const claw = useRef<HTMLSpanElement>(null);
+  const position = useRef(50);
+  const [target, setTarget] = useState<number | null>(null);
+  const later = useLater();
+  const count = play.options.length;
+  useEffect(() => {
+    if (target !== null) return;
+    let frame = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      // Sweeps from edge to edge and back, a little faster than comfortable.
+      position.current = 50 + 40 * Math.sin((now - start) / 520);
+      if (claw.current) claw.current.style.left = `${position.current}%`;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target]);
+  const drop = () => {
+    if (target !== null) return;
+    const slot = Math.min(count - 1, Math.max(0, Math.floor((position.current - 10) / (80 / count))));
+    setTarget(slot);
+    sfx('whirl'); sfx('thunk', 700); sfx('coin', 1400);
+    later(() => onDone(picked(play, slot, '🕹 Got it!')), 2400);
+  };
+  return <div className={`recap-claw${target !== null ? ' is-dropping' : ''}`} style={vars({ '--slot': target ?? 0, '--count': count })}>
+    <div className="recap-claw-cabinet">
+      <span className="recap-claw-rail" aria-hidden="true" />
+      <span ref={claw} className="recap-claw-arm" style={target !== null ? vars({ left: `${10 + (target + .5) * (80 / count)}%` }) : undefined} aria-hidden="true"><i className="recap-claw-cable" /><i className="recap-claw-grip" /></span>
+      <div className="recap-claw-prizes">{play.options.map((option, i) => <span key={option.id} className={`recap-claw-prize${target === i ? ' is-grabbed' : ''}`} style={vars({ '--i': i })}>
+        <b aria-hidden="true">{option.mark}</b><small>{option.teaser}</small>
+      </span>)}</div>
+    </div>
+    <button type="button" className="recap-solid-button recap-claw-drop" onClick={drop} disabled={target !== null}>⬇ Drop</button>
+  </div>;
 }
 
 /** One receipt face up, the other face down: was it higher or lower? The card flips to tell. */

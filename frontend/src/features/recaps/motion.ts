@@ -21,10 +21,18 @@ const hash = (value: string) => [...value].reduce((sum, char) => Math.imul(sum ^
 export const TRANSITIONS = ['slide', 'drop', 'zoom', 'flip', 'spin', 'glitch', 'iris', 'blinds', 'curtain'] as const;
 /** Set pieces between chapters: a train passing, lift doors, a chomper. Rare, and never on low-end phones. */
 export const ELABORATE_TRANSITIONS = ['train', 'elevator', 'chomp'] as const;
-export type Transition = typeof TRANSITIONS[number] | typeof ELABORATE_TRANSITIONS[number] | 'rewind';
+/** Eye-candy scenes of about five seconds between chapters: fireworks, an aurora, the deep sea, a tile
+ * mosaic, falling coins, a lava lamp. Rarer still, never twice in a row, and a tap skips one. */
+export const SPECTACLE_TRANSITIONS = ['fireworks', 'aurora', 'deepsea', 'mosaic', 'coinfall', 'lavalamp'] as const;
+export type Spectacle = typeof SPECTACLE_TRANSITIONS[number];
+export type Transition = typeof TRANSITIONS[number] | typeof ELABORATE_TRANSITIONS[number] | Spectacle | 'rewind';
+export const SPECTACLES = new Set<Transition>(SPECTACLE_TRANSITIONS);
+/** How long a spectacle holds the card; the next chapter arrives as it clears. */
+export const SPECTACLE_MS = 4_800;
 /** These paint the next chapter's colour over the card first, so the new content waits for them. */
-export const OVERLAY_TRANSITIONS = new Set<Transition>(['iris', 'blinds', 'curtain', 'rewind', ...ELABORATE_TRANSITIONS]);
-const ENTER_DELAYS: Partial<Record<Transition, number>> = { flip: 260, train: 1250, elevator: 1150, chomp: 1050 };
+export const OVERLAY_TRANSITIONS = new Set<Transition>(['iris', 'blinds', 'curtain', 'rewind', ...ELABORATE_TRANSITIONS, ...SPECTACLE_TRANSITIONS]);
+const ENTER_DELAYS: Partial<Record<Transition, number>> = { flip: 260, train: 1250, elevator: 1150, chomp: 1050,
+  ...Object.fromEntries(SPECTACLE_TRANSITIONS.map(name => [name, SPECTACLE_MS - 500])) };
 export const enterDelay = (transition: Transition) => ENTER_DELAYS[transition] ?? (OVERLAY_TRANSITIONS.has(transition) ? 420 : 120);
 
 /** Phones with little memory or few cores get the same recap with lighter dice: no set-piece transitions. */
@@ -33,8 +41,13 @@ export const lowEndDevice = () => typeof navigator !== 'undefined'
 
 export function nextTransition(run: number, visit: number, previous: Transition, lite = false): Transition {
   const random = seeded(run + visit * 7919);
-  // About one move in twelve becomes a set piece, never two in a row.
-  if (!lite && visit > 1 && !(ELABORATE_TRANSITIONS as readonly string[]).includes(previous) && random() < .085) return pickFrom(ELABORATE_TRANSITIONS, random);
+  // About one move in twelve becomes a set piece and one in ten a spectacle, never two showpieces in a row.
+  const showpiece = (ELABORATE_TRANSITIONS as readonly string[]).includes(previous) || SPECTACLES.has(previous);
+  if (!lite && visit > 1 && !showpiece) {
+    const roll = random();
+    if (roll < .085) return pickFrom(ELABORATE_TRANSITIONS, random);
+    if (roll < .185) return pickFrom(SPECTACLE_TRANSITIONS, random);
+  }
   let choice: Transition = pickFrom(TRANSITIONS, random);
   if (choice === previous) choice = pickFrom(TRANSITIONS, random);
   return choice;
@@ -91,7 +104,7 @@ const sectionVariants = {
   budget: ['meter', 'gauge'],
   versus: ['bars', 'versus'],
   closing: ['deal', 'flip'],
-  finale: ['card', 'receipt', 'credits', 'certificate', 'scoreboard', 'polaroid', 'trading', 'frontpage', 'post'],
+  finale: ['card', 'receipt', 'credits', 'certificate', 'scoreboard', 'polaroid', 'trading', 'frontpage', 'post', 'trophy', 'museum', 'weather', 'snowglobe'],
   burst: ['confetti', 'stars', 'coins'],
   // Second (and third) looks for chapters that had one layout. The first option is the house layout.
   weekdays: ['bars', 'clock', 'podium', 'planner'],
@@ -119,7 +132,7 @@ export function runParts(variants: RunVariants) {
   if (variants.weekdays !== 'bars' || variants.streak !== 'strip' || variants.habits !== 'trio' || variants.mixtape !== 'cassette' || variants.months !== 'bars') parts.add('layouts');
   if (variants.persona === 'alt') parts.add('persona');
   if (variants.bonus === 'alt') parts.add('bonus');
-  if (['polaroid', 'trading', 'frontpage', 'post'].includes(variants.finale)) parts.add('finales');
+  if (['polaroid', 'trading', 'frontpage', 'post', 'trophy', 'museum', 'weather', 'snowglobe'].includes(variants.finale)) parts.add('finales');
   return parts;
 }
 

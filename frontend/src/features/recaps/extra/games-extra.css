@@ -90,6 +90,83 @@
 .recap-tf-choice.is-right:not(.is-picked) { border-style: dashed; }
 
 @keyframes recap-memory-deal { from { opacity: 0; translate: 0 -24cqw; rotate: -12deg; } }
+/* ---------- Crossroads games: the pick decides the next chapter. ---------- */
+/* Doors: three tall doors swing open on their hinges; the unpicked ones only crack open. */
+.recap-doors { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 3cqw; align-items: end; margin-top: 5cqw; perspective: 160cqw; }
+.recap-door-pick { position: relative; height: 62cqw; padding: 0; border: 0; border-radius: 14cqw 14cqw 1.4cqw 1.4cqw; background: color-mix(in srgb, var(--recap-ink) 85%, #000); color: var(--recap-paper); cursor: pointer;
+  box-shadow: 0 0 0 1cqw color-mix(in srgb, var(--recap-ink) 30%, transparent); animation: recap-option-in .6s cubic-bezier(.2, 1.3, .4, 1) calc(var(--enter) + 500ms + var(--i) * 120ms) both; }
+.recap-door-pick:disabled { cursor: default; }
+.recap-door-behind { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 2cqw; padding: 3cqw; border-radius: inherit; text-align: center;
+  background: radial-gradient(circle at 50% 40%, var(--recap-pop), color-mix(in srgb, var(--recap-pop) 50%, #000)); color: var(--recap-on-pop); }
+.recap-door-behind b { font-size: 10cqw; line-height: 1; }
+.recap-door-behind small { font-size: max(2.4cqw, 10.5px); font-weight: 800; line-height: 1.2; }
+.recap-door-leaf { position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit; background: linear-gradient(90deg, color-mix(in srgb, var(--recap-accent) 85%, #000), var(--recap-accent));
+  box-shadow: inset 0 0 0 1.4cqw #0002, inset 0 -18cqw 0 -14cqw #0002; transform-origin: 0 50%; transition: transform .9s cubic-bezier(.3, 1.2, .4, 1); backface-visibility: hidden; }
+.recap-door-leaf b { font-size: 12cqw; font-weight: 900; color: #fff; }
+.recap-door-leaf i { position: absolute; right: 3cqw; top: 55%; width: 2.6cqw; height: 2.6cqw; border-radius: 50%; background: #ffd23d; box-shadow: 0 .4cqw 0 #0004; }
+.recap-door-pick:not(:disabled):hover .recap-door-leaf { transform: rotateY(-14deg); }
+.recap-door-pick.is-open .recap-door-leaf { transform: rotateY(-105deg); }
+.recap-door-pick.is-peek .recap-door-leaf { transform: rotateY(-38deg); transition-delay: .7s; }
+.recap-door-pick.is-peek { opacity: .7; }
+.recap-door-pick.is-open { box-shadow: 0 0 0 1cqw var(--recap-pop), 0 0 8cqw var(--recap-pop); }
+
+/* Fork: a road splits under a signpost; a walker heads off the way you chose. */
+.recap-fork { position: relative; flex: 1; min-height: 70cqw; margin-top: 4cqw; }
+.recap-fork-roads { position: absolute; inset: 0; width: 100%; height: 100%; fill: color-mix(in srgb, var(--recap-ink) 22%, transparent); }
+.recap-fork-post { position: absolute; left: 50%; top: 18%; width: 1.6cqw; height: 46%; translate: -50% 0; border-radius: 1cqw; background: var(--recap-ink); }
+.recap-fork-sign { position: absolute; top: 14%; display: grid; gap: 1cqw; width: 42cqw; padding: 3cqw 4cqw; border: 0; background: var(--recap-pop); color: var(--recap-on-pop); font: inherit; font-size: max(3cqw, 11px); font-weight: 800; line-height: 1.2; text-align: left; cursor: pointer;
+  animation: recap-option-in .6s cubic-bezier(.2, 1.3, .4, 1) calc(var(--enter) + 500ms) both; }
+.recap-fork-sign b { font-size: 6cqw; line-height: 1; }
+.recap-fork-sign.is-left { right: 50%; clip-path: polygon(10% 0, 100% 0, 100% 100%, 10% 100%, 0 50%); padding-left: 8cqw; rotate: -4deg; }
+.recap-fork-sign.is-right { left: 50%; clip-path: polygon(0 0, 90% 0, 100% 50%, 90% 100%, 0 100%); padding-right: 8cqw; rotate: 4deg; animation-delay: calc(var(--enter) + 650ms); }
+.recap-fork-sign:disabled { cursor: default; opacity: .55; }
+.recap-fork-sign.is-chosen { opacity: 1; scale: 1.08; }
+.recap-fork-walker { position: absolute; left: 50%; bottom: 4%; width: 6cqw; height: 6cqw; translate: -50% 0; border-radius: 50%; background: var(--recap-accent); box-shadow: 0 0 0 1.2cqw color-mix(in srgb, var(--recap-accent) 30%, transparent); }
+.recap-fork.is-left .recap-fork-walker { animation: recap-fork-left 1.5s cubic-bezier(.5, 0, .3, 1) forwards; }
+.recap-fork.is-right .recap-fork-walker { animation: recap-fork-right 1.5s cubic-bezier(.5, 0, .3, 1) forwards; }
+@keyframes recap-fork-left { 45% { left: 50%; bottom: 42%; } 100% { left: 8%; bottom: 80%; scale: .6; } }
+@keyframes recap-fork-right { 45% { left: 50%; bottom: 42%; } 100% { left: 92%; bottom: 80%; scale: .6; } }
+
+/* Dice: a big die tumbles and lands; the legend lights the chapter its face picked. */
+.recap-dice { flex: 1; display: grid; justify-items: center; align-content: center; gap: 4cqw; }
+.recap-die { display: grid; place-items: center; width: 34cqw; height: 34cqw; padding: 0; border: 0; border-radius: 6cqw; background: #fbfaf5; box-shadow: inset 0 -2cqw 0 #0001, 0 3cqw 6cqw -2cqw #0008; cursor: pointer;
+  animation: recap-ring-in .7s cubic-bezier(.2, 1.5, .4, 1) calc(var(--enter) + 400ms) both; }
+.recap-die:disabled { cursor: default; }
+.recap-die-face { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 2cqw; width: 70%; height: 70%; }
+.recap-die-face i { border-radius: 50%; }
+.recap-die-face i.is-pip { background: #1d211c; }
+.recap-dice.is-rolling .recap-die { animation: recap-die-roll .28s linear infinite; }
+.recap-dice.is-rolling .recap-die-face { opacity: .2; filter: blur(.4cqw); }
+.recap-dice.is-landed .recap-die { animation: recap-die-land .5s cubic-bezier(.2, 1.6, .4, 1); box-shadow: 0 0 0 1.4cqw var(--recap-pop), 0 3cqw 6cqw -2cqw #0008; }
+.recap-dice-hint { font-size: max(3cqw, 11px); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.recap-dice-legend { display: grid; gap: 1.6cqw; width: 100%; }
+.recap-dice-legend li { display: flex; align-items: center; gap: 3cqw; padding: 2.4cqw 3cqw; border-radius: 3cqw; background: var(--recap-soft); font-size: max(3cqw, 11px); font-weight: 750; transition: background .3s, scale .3s; }
+.recap-dice-legend li span { font-size: 6cqw; line-height: 1; letter-spacing: .1em; }
+.recap-dice-legend li.is-hit { background: var(--recap-pop); color: var(--recap-on-pop); scale: 1.04; }
+@keyframes recap-die-roll { 0% { rotate: 0deg; translate: 0 0; } 25% { translate: -3cqw -4cqw; } 50% { rotate: 180deg; translate: 2cqw 0; } 75% { translate: 3cqw -3cqw; } 100% { rotate: 360deg; translate: 0 0; } }
+@keyframes recap-die-land { 0% { scale: 1.3; } }
+
+/* Claw machine: the claw sweeps the cabinet; Drop sends it down to grab the prize beneath. */
+.recap-claw { flex: 1; display: flex; flex-direction: column; gap: 4cqw; margin-top: 3cqw; }
+.recap-claw-cabinet { position: relative; flex: 1; min-height: 64cqw; overflow: hidden; border: 1.2cqw solid var(--recap-ink); border-radius: 4cqw; background: linear-gradient(180deg, color-mix(in srgb, var(--recap-accent) 25%, transparent), color-mix(in srgb, var(--recap-ink) 12%, transparent)); }
+.recap-claw-rail { position: absolute; left: 4%; right: 4%; top: 4cqw; height: 1.4cqw; border-radius: 1cqw; background: var(--recap-ink); }
+.recap-claw-arm { position: absolute; top: 4cqw; left: 50%; width: 0; height: 0; }
+.recap-claw-cable { position: absolute; left: -.4cqw; top: 0; width: .8cqw; height: 6cqw; background: var(--recap-ink); transform-origin: top; }
+.recap-claw-grip { position: absolute; left: -6cqw; top: 6cqw; width: 12cqw; height: 7cqw; border: 1.2cqw solid var(--recap-ink); border-top-width: 2cqw; border-bottom: 0; border-radius: 3cqw 3cqw 0 0; }
+.recap-claw.is-dropping .recap-claw-arm { transition: left .3s ease-out; }
+.recap-claw.is-dropping .recap-claw-cable { animation: recap-claw-cable 2.2s ease-in-out .3s forwards; }
+.recap-claw.is-dropping .recap-claw-grip { animation: recap-claw-grip 2.2s ease-in-out .3s forwards; }
+.recap-claw-prizes { position: absolute; left: 10%; right: 10%; bottom: 3cqw; display: grid; grid-template-columns: repeat(var(--count), 1fr); gap: 2cqw; }
+.recap-claw-prize { display: grid; justify-items: center; gap: 1cqw; text-align: center; }
+.recap-claw-prize b { display: grid; place-items: center; width: 15cqw; height: 15cqw; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff8, transparent 40%), var(--recap-pop); color: var(--recap-on-pop); font-size: 7cqw; box-shadow: 0 1.4cqw 2cqw -1cqw #0007; }
+.recap-claw-prize small { font-size: max(2.2cqw, 10.5px); font-weight: 800; line-height: 1.15; }
+.recap-claw-prize.is-grabbed b { animation: recap-claw-lift 2.2s ease-in-out .3s forwards; }
+.recap-claw-drop { align-self: stretch; }
+/* Down to the prizes (about 40cqw), a pause to grip, then back up with the prize. */
+@keyframes recap-claw-cable { 0% { height: 6cqw; } 40%, 55% { height: 40cqw; } 100% { height: 8cqw; } }
+@keyframes recap-claw-grip { 0% { top: 6cqw; } 40% { top: 40cqw; scale: 1 1; } 55% { top: 40cqw; scale: .8 1; } 100% { top: 8cqw; scale: .8 1; } }
+@keyframes recap-claw-lift { 0%, 55% { translate: 0 0; } 100% { translate: 0 -32cqw; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .recap-hilo *, .recap-memory *, .recap-wheel *, .recap-tf * { animation: none !important; transition: none !important; }
+  .recap-hilo *, .recap-memory *, .recap-wheel *, .recap-tf *, .recap-doors *, .recap-fork *, .recap-dice *, .recap-claw * { animation: none !important; transition: none !important; }
 }

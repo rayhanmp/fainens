@@ -40,8 +40,46 @@ export type Play =
   | { kind: 'higherLower'; anchor: { label: string; amount: number }; challenger: { label: string; amount: number }; answer: 'Higher' | 'Lower' }
   | { kind: 'memory'; cards: Array<{ name: string; label: string }> }
   | { kind: 'wheel'; slices: Array<{ name: string; label: string; share: number }>; winner: string }
-  | { kind: 'truefalse'; statement: string; answer: boolean; reveal: string };
-export const EXTRA_GAMES = new Set<Play['kind']>(['higherLower', 'memory', 'wheel', 'truefalse']);
+  | { kind: 'truefalse'; statement: string; answer: boolean; reveal: string }
+  // Crossroads games: the pick decides which chapter comes next (see applyCrossroads).
+  | { kind: 'doors'; options: CrossroadsOption[] }
+  | { kind: 'fork'; options: CrossroadsOption[] }
+  | { kind: 'dice'; options: CrossroadsOption[] }
+  | { kind: 'claw'; options: CrossroadsOption[] };
+export const EXTRA_GAMES = new Set<Play['kind']>(['higherLower', 'memory', 'wheel', 'truefalse', 'doors', 'fork', 'dice', 'claw']);
+export type CrossroadsKind = 'doors' | 'fork' | 'dice' | 'claw';
+/** A chapter still ahead that a crossroads game can bring forward. */
+export type CrossroadsOption = { id: string; teaser: string; mark: string };
+/** What each chapter a crossroads can offer is called on its door, signpost, die or prize. */
+const CROSSROADS_OPTIONS: Partial<Record<string, { teaser: string; mark: string }>> = {
+  budget: { teaser: 'The plan vs. reality', mark: '◎' }, categories: { teaser: 'Where the money went', mark: '◔' },
+  calendar: { teaser: 'Your busiest day', mark: '▦' }, weekdays: { teaser: 'Your weekly rhythm', mark: '≋' },
+  streak: { teaser: 'Your longest streak', mark: '➶' }, receipts: { teaser: 'The biggest receipts', mark: '✚' },
+  habits: { teaser: 'How you really buy', mark: '♺' }, comparison: { teaser: 'Then vs. now', mark: '⇄' },
+  mixtape: { teaser: 'Your period mixtape', mark: '♫' }, months: { teaser: 'Every month, ranked', mark: '▤' }, bonus: { teaser: 'A bonus round', mark: '★' },
+};
+
+/**
+ * A crossroads game's answer applied to the run: the chapter it picked moves up to come straight after
+ * it, and the crossroads chapter's own reveal says what's next. Unanswered, the order stands; skipped,
+ * the story carries on in order. Only chapters still ahead ever move, so where you are never changes.
+ */
+export function applyCrossroads(stories: RecapStory[], choice: string | null | undefined): RecapStory[] {
+  const at = stories.findIndex(story => story.id === 'crossroads');
+  if (at < 0 || choice === undefined) return stories;
+  const crossroads = stories[at] as Extract<RecapStory, { id: 'crossroads' }>;
+  const from = choice ? stories.findIndex((story, i) => i > at && story.id === choice) : -1;
+  const option = crossroads.options.find(item => item.id === choice);
+  const result = [...stories];
+  result[at] = from >= 0 && option
+    ? { ...crossroads, chosen: option.id, eyebrow: { doors: 'Behind your door', fork: 'The road you took', dice: 'The dice decided', claw: 'Your prize' }[crossroads.kind], title: `Next up: ${option.teaser}.`, body: '' }
+    : { ...crossroads, chosen: null, eyebrow: 'No pick', title: 'The story carries on in order.', body: '' };
+  if (from > at + 1) {
+    const [picked] = result.splice(from, 1);
+    result.splice(at + 1, 0, picked);
+  }
+  return result;
+}
 export type InterludeVariant = 'marquee' | 'orbit' | 'tunnel' | 'liquid' | 'rain' | 'kaleido' | 'ejected';
 /** How the ejection reads each verdict; `{x}` is the category and `{n}` the suspects still standing. */
 export type EjectVerdicts = { innocent: string; guilty: string; remain: string };
@@ -132,6 +170,8 @@ export type RecapStory = Copy & Extras & { theme: RecapTheme } & (
   // Only while a period is running: where in it you are, and the pace so far.
   | { id: 'pace'; lead: PaceStage; elapsedDays: number; totalDays: number; perDay: number; projected: number; endLabel: string }
   | { id: 'closing'; tiles: ClosingTile[]; persona: Persona; finale: FinaleFacts }
+  // A game whose pick brings one of the chapters ahead forward to come next.
+  | { id: 'crossroads'; kind: CrossroadsKind; options: CrossroadsOption[]; chosen?: string | null }
 );
 export type RecapStoryId = RecapStory['id'];
 type ChapterData = RecapStory extends infer Story ? Story extends RecapStory ? Omit<Story, 'theme' | keyof Copy | keyof Extras> : never : never;
@@ -514,6 +554,19 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     const [early] = chapters.splice(personaAt, 1);
     if (early.id === 'persona') chapters.splice(1, 0, { ...early, early: true });
   }
+  // Crossroads: about half the runs get a game, a few chapters in, whose pick decides which chapter
+  // comes next. Its options are chapters still ahead, so whatever isn't picked still plays later.
+  if (run !== 0 && cut !== 'speedrun' && random() < .55) {
+    const kind = pickFrom(['doors', 'fork', 'dice', 'claw'] as const, random);
+    const want = kind === 'fork' ? 2 : 3;
+    const pickable = (chapter: ChapterData) => Boolean(CROSSROADS_OPTIONS[chapter.id]);
+    const spots = chapters.map((_, i) => i).filter(i => i >= 2 && i <= chapters.length - 3 && chapters.slice(i).filter(pickable).length >= want);
+    if (spots.length) {
+      const at = pickFrom(spots.slice(0, Math.max(1, Math.ceil(spots.length * .6))), random);
+      const options = shuffled(chapters.slice(at).filter(pickable)).slice(0, want).map(chapter => ({ id: chapter.id, ...CROSSROADS_OPTIONS[chapter.id]! }));
+      chapters.splice(at, 0, { id: 'crossroads', kind, options });
+    }
+  }
 
   // Mini-games: every eligible (chapter, game) pair goes in a hat, and a run deals two or three of
   // them with no chapter and no kind of game twice, so the quiz is one game among several.
@@ -698,19 +751,23 @@ export function buildStories(recap: PeriodRecap, edition?: SavedRecapStory, run 
     mixtape: 'Side A of your period mixtape', months: 'Every month, ranked', bonus: 'A bonus round your figures unlocked',
   };
   const gameTeaser: Record<Play['kind'], string> = { quiz: 'a pop quiz', slider: 'a guessing game', reels: 'a jackpot round', hold: 'a drumroll', gift: 'a surprise gift', piggy: 'a piggy bank to smash',
-    higherLower: 'a game of higher or lower', memory: 'a memory match', wheel: 'a spin of the wheel', truefalse: 'a true-or-false round' };
-  const games = [...dealt.values()].map(item => gameTeaser[item.kind]);
+    higherLower: 'a game of higher or lower', memory: 'a memory match', wheel: 'a spin of the wheel', truefalse: 'a true-or-false round',
+    doors: 'three doors to choose from', fork: 'a fork in the road', dice: 'a roll of the dice', claw: 'a claw machine' };
+  const crossroadsPlay = chapters.find(chapter => chapter.id === 'crossroads');
+  const games = [...(crossroadsPlay?.id === 'crossroads' ? [gameTeaser[crossroadsPlay.kind]] : []), ...[...dealt.values()].map(item => gameTeaser[item.kind])];
   const cutLine = cut === 'directors' ? 'The director’s cut: every chapter' : cut === 'speedrun' ? 'Speedrun edition: the quick lap' : null;
   const teasers = [...(cutLine ? [cutLine] : []), ...shuffled(chapters.map(chapter => teaserFor[chapter.id]).filter((line): line is string => Boolean(line))).slice(0, cutLine ? 2 : 3),
     ...(games.length ? [`Plus ${games.slice(0, 2).join(' and ')}`] : [])].map(forYear);
   const built = chapters.map((chapter, i) => {
     if (chapter.id === 'intro') chapter = { ...chapter, cover: { ...chapter.cover, teasers, chapterCount: chapters.length } };
-    const raw = chapter.id === 'bonus' ? pickCopy(bonusCopy(chapter.bonus, facts)) : chapter.id === 'year' ? pickCopy(yearCopy(chapter.insight))
+    // A crossroads' own copy is replaced by what was picked (applyCrossroads); this is its label until then.
+    const raw = chapter.id === 'crossroads' ? { eyebrow: pickFrom(['Choose your own recap', 'Your call', 'Plot twist, your way'], random), title: 'You pick what’s next.', body: '' }
+      : chapter.id === 'bonus' ? pickCopy(bonusCopy(chapter.bonus, facts)) : chapter.id === 'year' ? pickCopy(yearCopy(chapter.insight))
       : copyFor(chapter.id, 'lead' in chapter ? chapter.lead : chapter.id === 'interlude' ? chapter.variant : chapter.id === 'persona' ? chapter.persona.key : undefined);
     const early = chapter.id === 'persona' && chapter.early;
     const copy = { eyebrow: forYear(early ? 'Spoiler first' : raw.eyebrow), title: forYear(raw.title), body: forYear(raw.body), flavour: early ? undefined : raw.flavour };
     const equivalence = equivalences[chapter.id];
-    const play = dealt.get(chapter.id);
+    const play = chapter.id === 'crossroads' ? { kind: chapter.kind, options: chapter.options } as Play : dealt.get(chapter.id);
     return {
       // The ejection is set in space: the whole card goes dark.
       ...chapter, ...copy, theme: chapter.id === 'persona' && run !== 0 ? PERSONA_THEMES[chapter.persona.key] : chapter.id === 'interlude' && chapter.variant === 'ejected' ? 'noir' : palette[i % palette.length],
