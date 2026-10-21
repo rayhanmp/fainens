@@ -101,7 +101,13 @@ function RecapViewer({ edition, previous = null, controls, yearMode = false }: {
   const lite = useMemo(() => lowEndDevice(), []);
   const variants = useMemo(() => runVariants(run, lite), [run, lite]);
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
-  const dealt = useMemo(() => buildStories(recap, edition, run, previousAtOpen).map(story => ({ ...story, title: maskAmounts(story.title), body: maskAmounts(story.body) })), [recap, edition, run, previousAtOpen, maskAmounts]);
+  // Hidden balances cover everything a chapter prints, the money personality's evidence and figure too.
+  const dealt = useMemo(() => buildStories(recap, edition, run, previousAtOpen).map(story => ({
+    ...story,
+    title: maskAmounts(story.title),
+    body: maskAmounts(story.body),
+    ...('persona' in story && story.persona ? { persona: { ...story.persona, evidence: story.persona.evidence.map(maskAmounts), dash: story.persona.dash == null ? null : maskAmounts(story.persona.dash) } } : {}),
+  }) as typeof story), [recap, edition, run, previousAtOpen, maskAmounts]);
   // A crossroads game decides what comes next: the chapter it picked moves up to follow it.
   const crossroadsChoice = answers.crossroads?.choice;
   const stories = useMemo(() => applyCrossroads(dealt, crossroadsChoice), [dealt, crossroadsChoice]);
